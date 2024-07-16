@@ -7,8 +7,10 @@ from scipy.stats import pointbiserialr
 
 from tqdm import tqdm
 from gtfparse import read_gtf
+from prefect import flow, task
 
 
+@task
 def filter_zero_median(df: pd.DataFrame) -> pd.DataFrame:
     df_median = df.median()
     if (df_median == 0).any():
@@ -24,6 +26,7 @@ def filter_zero_median(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+@task
 def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.8) -> pd.DataFrame:
     X_corr = X
     y_corr = y
@@ -37,14 +40,14 @@ def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.
     return X.drop(columns=columns_to_drop)
 
 
+@task
 def logarithmization(df: pd.DataFrame):
-    # numerical_cols = df.iloc[:1].select_dtypes(include=[np.number]).columns
-    # df = df.replace(0, 1e-6)
     df = np.log2(df + 1)
     return df
 
 
-def filter_by_cv(df, threshold):
+@task
+def filter_cv_threshold(df: pd.DataFrame, threshold: float):
     cv = df.std() / df.mean()
     low_cv_cols = cv[cv < threshold].index
 
@@ -57,78 +60,165 @@ def filter_by_cv(df, threshold):
     return df
 
 
-fdir_raw = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/raw/")
-fdir_processed = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/interim")
-fdir_traintest = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/processed")
+@task
+def read_geuvadis(fname_data: Path | str,
+                  fname_header: Path | str,
+                  fname_gtf: Path | str):
+    data_raw = pd.read_csv(fname_data, index_col=0).T
+    data_raw = data_raw.astype(np.float32)
 
+    data_header = pd.read_csv(fname_header, index_col=0)
 
-# -----------------------------------Read data---------------------------------------------
-
-data = pd.read_csv(fdir_raw / 'Geuvadis.all.csv', index_col=0).T
-data = data.astype(np.float32)
-# data.rename(columns={"Unnamed: 0": "trascripts"})
-
-data_header = pd.read_csv(fdir_raw / 'Geuvadis.SraRunTable.txt', index_col=0)
-data_header = data_header[['Sex',
-                           'Experimental_Factor:_population (exp)']]
-print(data.shape)
-# -----------------------------------Pipeline---------------------------------------------
-
-data = filter_zero_median(data)
-print(data.shape)
-
-data = filter_correlated(data,
-                         data_header['Sex'].loc[data.index])
-print(data.shape)
-
-data = logarithmization(data)
-
-data = filter_by_cv(data, 0.7)
-print(data.shape)
-
-mean = data.mean(axis=0)
-median = mean.median()
-data = data.loc[:, mean > median]
-print(data.shape)
-
-cv = data.std() / data.mean()
-median_cv = cv.median()
-data = data.loc[:, cv > median_cv]
-
-data = data.astype(np.float32)
-
-gencode_intersect = False
-if gencode_intersect:
-    gtf_rawdata = read_gtf(fdir_raw / 'all_transcripts_strigtie_merged.gtf')
+    gtf_rawdata = read_gtf(fname_gtf)
     gtf_data = gtf_rawdata.to_pandas()
-    gtf_data = gtf_data[['seqname', 'transcript_id']]
-
     gtf_data = gtf_data.set_index('transcript_id')
+    gtf_data['transcript_id'] = gtf_data.index
 
-    transcripts_gencode = gtf_data.index
-    transcripts_geu = data.columns
+    gtf_data = gtf_data.drop_duplicates("transcript_id")
 
-    intersection = transcripts_geu.intersection(transcripts_gencode)
+    return data_raw, data_header, gtf_data
 
-    data = data[intersection]
-    print(data.shape)
+
+@task
+def filter_median_q34(data: pd.DataFrame):
+    mean = data.mean(axis=0)
+    median = mean.median()
+    data = data.loc[:, mean > median]
+    return data
+
+
+@task
+def filter_cv_q34(data: pd.DataFrame):
+    cv = data.std() / data.mean()
+    median_cv = cv.median()
+    data = data.loc[:, cv > median_cv]
+    return data
+
+
+@task
+def locate_sex_transcripts(gtf_data: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    transcripts_x = gtf_data.loc[gtf_data['seqname'] == 'chrX', 'transcript_id']
+    transcripts_y = gtf_data.loc[gtf_data['seqname'] == 'chrY', 'transcript_id']
+    transcripts_x = transcripts_x.unique()
+    transcripts_y = transcripts_y.unique()
+
+    return transcripts_x, transcripts_y
+
+
+@task
+def remove_sex_transcripts(data: pd.DataFrame, gtf_data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+    transcripts_x, transcripts_y = locate_sex_transcripts(gtf_data)
+    transcripts_x = transcripts_x.tolist()
+    transcripts_y = transcripts_y.tolist()
+
+    data_noX = data.drop(columns=data.columns.intersection(transcripts_x))
+    data_noY = data.drop(columns=data.columns.intersection(transcripts_y))
+    data_noXY = data_noY.drop(columns=data.columns.intersection(transcripts_x))
+
+    return data, data_noX, data_noY, data_noXY
+
+    # # # -----------------------------------Pipeline---------------------------------------------
+    # data = filter_zero_median(data)
+    # print(data.shape)
+
+    # data = filter_correlated(data,
+    #                          data_header['Sex'].loc[data.index])
+    # print(data.shape)
+
+    # data = logarithmization(data)
+
+    # data = filter_cv_threshold(data, 0.7)
+    # print(data.shape)
+
+    # mean = data.mean(axis=0)
+    # median = mean.median()
+    # data = data.loc[:, mean > median]
+    # print(data.shape)
+
+    # cv = data.std() / data.mean()
+    # median_cv = cv.median()
+    # data = data.loc[:, cv > median_cv]
+
+    # data = data.astype(np.float32)
+
+    # gencode_intersect = False
+    # if gencode_intersect:
+    #     gtf_rawdata = read_gtf(fdir_raw / 'all_transcripts_strigtie_merged.gtf')
+    #     gtf_data = gtf_rawdata.to_pandas()
+    #     gtf_data = gtf_data[['seqname', 'transcript_id']]
+
+    #     gtf_data = gtf_data.set_index('transcript_id')
+
+    #     transcripts_gencode = gtf_data.index
+    #     transcripts_geu = data.columns
+
+    #     intersection = transcripts_geu.intersection(transcripts_gencode)
+
+    #     data = data[intersection]
+    #     print(data.shape)
 
     # data['Sex'] = data_header['Sex']
 
-data.to_csv(fdir_processed / 'geuvadis.preprocessed.csv')
+    # data.to_csv(fdir_processed / 'geuvadis.preprocessed.csv')
 
-# ----------------------------------- Remove sex chr transcripts -------------------------------------
-# data = pd.read_csv(fdir_processed / 'geuvadis.preprocessed.csv', index_col=0)
-transcripts_x = pd.read_csv(fdir_processed / "all_transcripts.chrX.csv",
-                            index_col=0).values.ravel().tolist()
-transcripts_y = pd.read_csv(fdir_processed / "all_transcripts.chrY.csv",
-                            index_col=0).values.ravel().tolist()
+    # # ----------------------------------- Remove sex chr transcripts -------------------------------------
+    # # data = pd.read_csv(fdir_processed / 'geuvadis.preprocessed.csv', index_col=0)
+    # transcripts_x = pd.read_csv(fdir_processed / "all_transcripts.chrX.csv",
+    #                             index_col=0).values.ravel().tolist()
+    # transcripts_y = pd.read_csv(fdir_processed / "all_transcripts.chrY.csv",
+    #                             index_col=0).values.ravel().tolist()
 
-data_noX = data.drop(columns=data.columns.intersection(transcripts_x))
-data_noY = data.drop(columns=data.columns.intersection(transcripts_y))
-data_noXY = data_noY.drop(columns=data.columns.intersection(transcripts_x))
+    # data_noX = data.drop(columns=data.columns.intersection(transcripts_x))
+    # data_noY = data.drop(columns=data.columns.intersection(transcripts_y))
+    # data_noXY = data_noY.drop(columns=data.columns.intersection(transcripts_x))
 
-data_noX.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrY.csv')
-data_noY.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrX.csv')
-data_noXY.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.autosome.csv')
-data.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrXY.csv')
+    # data_noX.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrY.csv')
+    # data_noY.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrX.csv')
+    # data_noXY.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.autosome.csv')
+    # data.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrXY.csv')
+
+
+@flow
+def make_train_dataset():
+
+    fdir_raw = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/raw/")
+    fdir_processed = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/interim")
+    fdir_traintest = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/processed")
+
+    data_raw, data_header, gtf_data = read_geuvadis(
+        fdir_raw / 'Geuvadis.all.csv',
+        fdir_raw / 'Geuvadis.SraRunTable.txt',
+        fdir_raw / 'all_transcripts_strigtie_merged.gtf'
+    )
+
+    transcripts_x, transcripts_y = locate_sex_transcripts(gtf_data)
+
+    data = filter_zero_median(data_raw)
+    data = filter_correlated(data, data_header['Sex'].loc[data.index])
+    data = logarithmization(data)
+    data = filter_cv_threshold(data, 0.7)
+
+    data = filter_median_q34(data)
+    data = filter_cv_q34(data)
+    data = data.astype(np.float32)
+
+    data, data_noX, data_noY, data_noXY = remove_sex_transcripts(data, gtf_data)
+
+    gtf_data = gtf_data.loc[data.columns]
+
+    print(gtf_data)
+
+    # data.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="geuvadis", format='table')
+    # data_header.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header", format='table')
+    # gtf_data.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="gtf", format='table')
+
+    # data_noX.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrY.csv')
+    # data_noY.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrX.csv')
+    # data_noXY.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.autosome.csv')
+    # data.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrXY.csv')
+
+
+if __name__ == "__main__":
+
+    make_train_dataset()
