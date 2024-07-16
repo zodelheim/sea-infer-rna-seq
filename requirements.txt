@@ -1,0 +1,13 @@
+ipython
+jupyterlab
+matplotlib
+mkdocs
+notebook
+numpy
+pandas
+pip
+python-dotenv
+scikit-learn
+catboost 
+seaborn
+-e .
