@@ -27,9 +27,9 @@ model_type = 'catboost'
 model_type = 'xgboost'
 
 sex = 'chrXY'
-sex = 'chrX'
-sex = 'chrY'
-sex = 'autosome'
+# sex = 'chrX'
+# sex = 'chrY'
+# sex = 'autosome'
 
 print('```')
 print("*" * 20)
@@ -43,7 +43,7 @@ params_xgb = {
     "n_jobs": n_threads,
     "objective": 'binary:logistic',
     "n_estimators": 500,
-    # 'device': 'cuda',
+    'device': 'cuda',
     'eta': 0.05,
     'max_depth': 3,
     "gamma": 1e-6,
@@ -90,7 +90,7 @@ print('ground true: ', (data_heart_header['sex'].values == 'male').astype(int))
 features = pd.read_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv', index_col=0)
 features = features.loc[features.index.intersection(data_heart.columns)]
 features = features.sort_values(ascending=False, by="0")
-n_features = 30
+n_features = 50
 # print(features.iloc[:n_features].index)
 data_heart = data_heart[features.iloc[:n_features].index]
 data_heart.to_csv(fdir_external / 'HEART' / 'reg' / "heart.merged.TMP.preprocessed.important_features.csv")

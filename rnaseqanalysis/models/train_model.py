@@ -30,9 +30,9 @@ model_type = 'catboost'
 model_type = 'xgboost'
 
 sex = 'chrXY'
-sex = 'chrX'
+# sex = 'chrX'
 sex = 'chrY'
-# sex = 'autosome'
+sex = 'autosome'
 
 print("*" * 20)
 print(model_type)
@@ -67,8 +67,9 @@ params_catboost = {
 # mlflow.set_experiment(f"{sex}_{model_type}")
 
 
-n_features = 30
-data = pd.read_csv(fdir_traintest / f'geuvadis.preprocessed.{sex}.csv', index_col=0)
+n_features = 50
+# data = pd.read_csv(fdir_traintest / f'geuvadis.preprocessed.{sex}.csv', index_col=0)
+data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
 # data = pd.read_csv(fdir_traintest / f'geuvadis.preprocessed.10_features.{sex}.csv', index_col=0)
 
 features = pd.read_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv', index_col=0)
@@ -97,13 +98,15 @@ data = data[features.iloc[:n_features].index]
 # # exit()
 # data[data < -12] = pd.NA
 
-data_header = pd.read_csv(fdir_raw / 'Geuvadis.SraRunTable.txt', index_col=0)
-data_header = data_header[[
-    'Sex',
-    # 'Experimental_Factor:_population (exp)'
-]]
+# data_header = pd.read_csv(fdir_raw / 'Geuvadis.SraRunTable.txt', index_col=0)
+# data_header = data_header[[
+#     'Sex',
+#     # 'Experimental_Factor:_population (exp)'
+# ]]
 
-data_header = data_header.loc[data.index]
+# data_header = data_header.loc[data.index]
+data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key='header')
+
 
 X = data.values
 y = data_header['Sex']

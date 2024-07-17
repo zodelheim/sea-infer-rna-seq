@@ -197,6 +197,7 @@ def make_train_dataset():
     data, data_noX, data_noY, data_noXY = remove_sex_transcripts(data, gtf_data)
 
     gtf_data = gtf_data.loc[data.columns]
+    data_header = data_header.loc[data.index]
 
     # print(gtf_data)
 
@@ -204,10 +205,10 @@ def make_train_dataset():
     data_header.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header", format='f')
     gtf_data.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="gtf", format='table')
 
-    # # data_noX.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrY.csv')
-    # # data_noY.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrX.csv')
-    # # data_noXY.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.autosome.csv')
-    # # data.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrXY.csv')
+    data_noX.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrY', format='f')
+    data_noY.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrX', format='f')
+    data_noXY.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='autosome', format='f')
+    data.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrXY', format='f')
 
 
 if __name__ == "__main__":
