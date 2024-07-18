@@ -11,109 +11,142 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import StratifiedKFold, RepeatedStratifiedKFold
 from pathlib import Path
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, RocCurveDisplay, auc
-
+import json
 from tqdm import tqdm
 
 
-fdir_raw = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/raw/")
-fdir_processed = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/interim")
-fdir_traintest = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/processed") / 'sex'
-fdir_external = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/external")
-ml_models_fdir = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/models")
+fdir_raw = Path("data/raw/")
+fdir_processed = Path("data/interim")
+fdir_traintest = Path("data/processed") / 'sex'
+fdir_external = Path("data/external")
+ml_models_fdir = Path("models")
 
 use_CV = True
 
 model_type = 'catboost'
 model_type = 'xgboost'
 
-sex = 'chrXY'
+# sex = 'chrXY'
 # sex = 'chrX'
 # sex = 'chrY'
 # sex = 'autosome'
 
-print('```')
-print("*" * 20)
-print(model_type)
-print(sex)
-print("*" * 20)
+for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
-n_threads = 6
-params_xgb = {
-    # "early_stopping_rounds": 20,
-    "n_jobs": n_threads,
-    "objective": 'binary:logistic',
-    "n_estimators": 500,
-    'device': 'cuda',
-    'eta': 0.05,
-    'max_depth': 3,
-    "gamma": 1e-6,
-    # 'verbosity': 0
-    # "booster": "dart",
-}
+    print('```')
+    print("*" * 20)
+    print(model_type)
+    print(sex)
+    print("*" * 20)
 
-params_catboost = {
-    "loss_function": 'Logloss',  # MultiClass
-    "od_pval": 0.05,
-    "thread_count": n_threads,
-    "task_type": "GPU",
-    "iterations": 500,
-    "learning_rate": 0.03
-    #  devices='0'
-}
+    # n_threads = 6
+    # params_xgb = {
+    #     # "early_stopping_rounds": 20,
+    #     "n_jobs": n_threads,
+    #     "objective": 'binary:logistic',
+    #     "n_estimators": 500,
+    #     'device': 'cuda',
+    #     'eta': 0.05,
+    #     'max_depth': 3,
+    #     "gamma": 1e-6,
+    #     # 'verbosity': 0
+    #     # "booster": "dart",
+    # }
 
-if model_type == 'xgboost':
-    model = xgb.XGBClassifier(**params_xgb)
-    # model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
+    # params_catboost = {
+    #     "loss_function": 'Logloss',  # MultiClass
+    #     "od_pval": 0.05,
+    #     "thread_count": n_threads,
+    #     "task_type": "GPU",
+    #     "iterations": 500,
+    #     "learning_rate": 0.03
+    #     #  devices='0'
+    # }
 
-if model_type == 'catboost':
-    model = CatBoostClassifier(**params_catboost)
-    # model.fit(X_train_, y_train_,
-    #           eval_set=(X_val, y_val),
-    #           verbose=False,
-    #           use_best_model=True,
-    #           plot=False,
-    #           early_stopping_rounds=20)
+    with open(f'models/{model_type}.json', 'r') as file:
+        model_params = json.load(file)
 
+    if model_type == 'xgboost':
+        model = xgb.XGBClassifier(**model_params)
+        # model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
-fname = Path("heart.merged.TPM.preprocessed.csv")
+    if model_type == 'catboost':
+        model = CatBoostClassifier(**model_params)
+        # model.fit(X_train_, y_train_,
+        #           eval_set=(X_val, y_val),
+        #           verbose=False,
+        #           use_best_model=True,
+        #           plot=False,
+        #           early_stopping_rounds=20)
 
-data_heart = pd.read_csv(fdir_external / 'HEART' / 'reg' / fname, index_col=0)
-# print(data_heart.head())
+    fname = Path("heart.merged.TPM.processed.h5")
 
-data_heart_header = pd.read_csv(fdir_external / 'HEART' / 'reg' / 'SraRunTable.txt', sep=',')
-# print(data_heart_header)
-print('ground true: ', (data_heart_header['sex'].values == 'male').astype(int))
+    data_heart = pd.read_hdf(fdir_external / 'HEART' / 'reg' / fname, index_col=0)
 
-# data_heart[data_heart < -12] = pd.NA
+    data_heart_header = pd.read_csv(fdir_external / 'HEART' / 'reg' / 'SraRunTable.txt', sep=',')
+    print('ground true: ', (data_heart_header['sex'].values == 'male').astype(int))
 
+    # data_heart[data_heart < -12] = pd.NA
 
-features = pd.read_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv', index_col=0)
-features = features.loc[features.index.intersection(data_heart.columns)]
-features = features.sort_values(ascending=False, by="0")
-n_features = 50
-# print(features.iloc[:n_features].index)
-data_heart = data_heart[features.iloc[:n_features].index]
-data_heart.to_csv(fdir_external / 'HEART' / 'reg' / "heart.merged.TMP.preprocessed.important_features.csv")
-# print(model)
+    features = pd.read_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv', index_col=0)
+    features = features.loc[features.index.intersection(data_heart.columns)]
+    features = features.sort_values(ascending=False, by="0")
+    n_features = 50
+    # print(features.iloc[:n_features].index)
+    data_heart = data_heart[features.iloc[:n_features].index]
 
-X = data_heart.values
+    # data_heart.to_csv(fdir_external / 'HEART' / 'reg' / "heart.merged.TMP.preprocessed.important_features.csv")
+    # print(model)
 
-train_scaler = StandardScaler().fit(X)
-X = StandardScaler().fit_transform(X)
-proba = np.zeros(shape=(X.shape[0], 2))
-pred = np.zeros(shape=(X.shape[0]))
+    X = data_heart.values
+    y = data_heart_header['sex'].values
 
-for i in range(5):
-    saved_model_filename = f"geuvadis_fold{i}_{sex}.json"
-    model.load_model(fname=ml_models_fdir / model_type / saved_model_filename)
+    label_encoder = LabelEncoder().fit(y)
+    print(label_encoder.classes_, "[0, 1]")
 
-    proba += model.predict_proba(X)
-    pred += model.predict(X)
+    y = label_encoder.transform(y)
 
+    train_scaler = StandardScaler().fit(X)
+    X = StandardScaler().fit_transform(X)
+    proba = np.zeros(shape=(X.shape[0], 2))
+    pred = np.zeros(shape=(X.shape[0]))
 
-proba = proba / 5
-# pred = pred / 5
-print('predicted:   ', (proba[:, 1] > 0.5).astype(int))
-# print(pred.astype(int))
+    accuracies = []
+    f1 = []
+    precisions = []
+    recalls = []
 
-print('```')
+    for i in range(5):
+        saved_model_filename = f"geuvadis_fold{i}_{sex}.json"
+        model.load_model(fname=ml_models_fdir / model_type / saved_model_filename)
+
+        proba += model.predict_proba(X)
+
+        pred_ = model.predict(X)
+        if sex == 'autosome':
+            pred_ = np.abs(pred_ - 1)
+            # print(pred_)
+        pred += pred_
+
+        accuracies.append(accuracy_score(y, pred_))
+        f1.append(f1_score(y, pred_))
+        precisions.append(precision_score(y, pred_))
+        recalls.append(recall_score(y, pred_))
+
+    proba = proba / 5
+    # pred = pred / 5
+    if sex == 'autosome':
+        print('predicted:   ', (proba[:, 0] > 0.5).astype(int))
+    else:
+        print('predicted:   ', (proba[:, 1] > 0.5).astype(int))
+    # print(pred.astype(int))
+
+    mean_accuracy = np.mean(accuracies)
+    mean_f1 = np.mean(f1)
+    mean_precision = np.mean(precisions)
+    mean_recall = np.mean(recalls)
+    print(f"{mean_accuracy=}")
+    print(f"{mean_f1=}")
+    print(f"{mean_precision=}")
+    print(f"{mean_recall=}")
+    print('```')

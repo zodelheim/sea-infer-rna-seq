@@ -13,252 +13,189 @@ from pathlib import Path
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, RocCurveDisplay, auc
 from sklearn.decomposition import PCA
 import umap
+import json
 
 from tqdm import tqdm
 
 # mlflow.set_tracking_uri(uri="http://localhost:8080")
 
 
-fdir_raw = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/raw/")
-fdir_processed = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/interim")
-fdir_traintest = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/processed") / 'sex'
-fdir_external = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/external")
+fdir_raw = Path("data/raw/")
+fdir_processed = Path("data/interim")
+fdir_traintest = Path("data/processed") / 'sex'
+fdir_external = Path("data/external")
 
 use_CV = True
 
 model_type = 'catboost'
 model_type = 'xgboost'
 
-sex = 'chrXY'
-# sex = 'chrX'
-sex = 'chrY'
-sex = 'autosome'
+feature_importance_method = 'native'
+feature_importance_method = 'shap'
 
-print("*" * 20)
-print(model_type)
-print(sex)
-print("*" * 20)
-# mlflow.autolog()
+for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
-n_threads = 6
-params_xgb = {
-    # "early_stopping_rounds": 20,
-    "n_jobs": n_threads,
-    "objective": 'binary:logistic',
-    "n_estimators": 500,  # 500
-    # 'device': 'cuda',
-    'eta': 0.05,  # 0.05
-    'max_depth': 3,
-    "gamma": 1e-6,
-    # 'verbosity': 0,
-    # "booster": "dart",
-}
+    print("*" * 20)
+    print(model_type)
+    print(sex)
+    print("*" * 20)
 
-params_catboost = {
-    "loss_function": 'Logloss',  # MultiClass
-    "od_pval": 0.05,
-    "thread_count": n_threads,
-    "task_type": "GPU",
-    "iterations": 500,
-    "learning_rate": 0.03
-    #  devices='0'
-}
+    with open(f'models/{model_type}.json', 'r') as file:
+        model_params = json.load(file)
 
-# mlflow.set_experiment(f"{sex}_{model_type}")
-
-
-n_features = 50
-# data = pd.read_csv(fdir_traintest / f'geuvadis.preprocessed.{sex}.csv', index_col=0)
-data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
-# data = pd.read_csv(fdir_traintest / f'geuvadis.preprocessed.10_features.{sex}.csv', index_col=0)
-
-features = pd.read_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv', index_col=0)
-
-print(features.iloc[:n_features])
-
-# exit()
-# sns.barplot(features.iloc[:100], x=range(100), y=features.iloc[:100, 0])
-# plt.xticks(rotation=90)
-# plt.show()
-# exit()
-
-# data = data.drop()
-# index_to_drop = data.index[((((data - data.mean()) / data.std()).abs() > 9).sum(axis=1) > 0).values]
-# data = data.drop(index_to_drop)
-
-data_heart = pd.read_csv(fdir_external / 'HEART' / 'reg' / "heart.merged.TPM.preprocessed.csv", index_col=0)
-features = features.loc[features.index.intersection(data_heart.columns)]
-features = features.sort_values(ascending=False, by="0")
-print(features.iloc[:n_features])
-
-data = data[features.iloc[:n_features].index]
-
-# index_to_drop = data.index[((data < -12).sum(axis=1) > 0).values]
-# data = data.drop(index_to_drop)
-# # exit()
-# data[data < -12] = pd.NA
-
-# data_header = pd.read_csv(fdir_raw / 'Geuvadis.SraRunTable.txt', index_col=0)
-# data_header = data_header[[
-#     'Sex',
-#     # 'Experimental_Factor:_population (exp)'
-# ]]
-
-# data_header = data_header.loc[data.index]
-data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key='header')
-
-
-X = data.values
-y = data_header['Sex']
-
-# X_comps = PCA(2).fit_transform(X)
-# sns.scatterplot(x=X_comps[:, 0], y=X_comps[:, 1], hue=y)
-# plt.show()
-
-# reducer = umap.UMAP()
-# embedding = reducer.fit_transform(X)
-# sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=y)
-# plt.show()
-# exit()
-
-test_size = 0.2
-random_state = 42
-
-# X_train, X_test, y_train, y_test = train_test_split(
-#     X, y, test_size=test_size, random_state=random_state, shuffle=True)
-
-# train_scaler = StandardScaler().fit(X_train)
-# test_scaler = StandardScaler().fit(X_test)
-
-# X_train = train_scaler.transform(X_train)
-# X_test = test_scaler.transform(X_test)
-
-label_encoder = LabelEncoder().fit(y)
-y = label_encoder.transform(y)
-
-ml_models_fdir = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/models")
-
-# ----------------------------------------------------------------------------------------
-if use_CV:
-    cv = StratifiedKFold(n_splits=5)
-else:
-    X_train_, X_val, y_train_, y_val = train_test_split(X, y)
-
-mean_fpr = np.linspace(0, 1, 100)
-tprs = []
-accuracies = []
-f1 = []
-precisions = []
-recalls = []
-
-if model_type == 'xgboost':
-    model = xgb.XGBClassifier(**params_xgb)
-if model_type == 'catboost':
-    model = CatBoostClassifier(**params_catboost)
-
-fig, ax = plt.subplots(figsize=(6, 6))
-for i, (train, val) in tqdm(enumerate(cv.split(X, y))):
-    X_train = X[train]
-    y_train = y[train]
-    X_test = X[val]
-    y_test = y[val]
-
-    train_scaler = StandardScaler().fit(X_train)
-    test_scaler = StandardScaler().fit(X_test)
-
-    X_train = train_scaler.transform(X_train)
-    X_test = test_scaler.transform(X_test)
-
-    # y_train = label_encoder.transform(y_train)
-    # y_test = label_encoder.transform(y_test)
-
-    X_train_ = X_train
-    y_train_ = y_train
-    X_val = X_test
-    y_val = y_test
-
-    if model_type == 'xgboost':
-        # model = xgb.XGBClassifier(**params_xgb)
-        model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
-
-    if model_type == 'catboost':
-        # model = CatBoostClassifier(**params_catboost)
-        model.fit(X_train_, y_train_,
-                  eval_set=(X_val, y_val),
-                  verbose=False,
-                  use_best_model=True,
-                  plot=False,
-                  early_stopping_rounds=20)
-
-    if not (ml_models_fdir / model_type).is_dir():
-        (ml_models_fdir / model_type).mkdir()
-
-    pred = model.predict(X_test)
-    pred_prob = model.predict_proba(X_test)
-
-    viz = RocCurveDisplay.from_predictions(
-        y_test, pred_prob[:, 1],
-        ax=ax,
+    n_features = 50
+    data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
+    features = pd.read_hdf(
+        fdir_processed / f'feature_importance.{model_type}.sex.h5',
+        key=f'{sex}/{feature_importance_method}',
     )
 
-    interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
-    interp_tpr[0] = 0
-    tprs.append(interp_tpr)
+    print(features.iloc[:n_features])
 
-    accuracies.append(accuracy_score(y_test, pred))
-    f1.append(f1_score(y_test, pred))
-    precisions.append(precision_score(y_test, pred))
-    recalls.append(recall_score(y_test, pred))
+    data_heart = pd.read_hdf(fdir_external / 'HEART' / 'reg' / "heart.merged.TPM.processed.h5", index_col=0)
+    features = features.loc[features.index.intersection(data_heart.columns)]
+    features = features.sort_values(ascending=False, by="0")
+    print(features.iloc[:n_features])
 
-    saved_model_filename = f"geuvadis_fold{i}_{sex}.json"
-    model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
+    data = data[features.iloc[:n_features].index]
 
+    data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key='header')
 
-mean_tpr = np.mean(tprs, axis=0)
-mean_tpr[-1] = 1.0
+    X = data.values
+    y = data_header['Sex']
 
-mean_auc = auc(mean_fpr, mean_tpr)
-mean_accuracy = np.mean(accuracies)
-mean_f1 = np.mean(f1)
-mean_precision = np.mean(precisions)
-mean_recall = np.mean(recalls)
+    # X_comps = PCA(2).fit_transform(X)
+    # sns.scatterplot(x=X_comps[:, 0], y=X_comps[:, 1], hue=y)
+    # plt.show()
 
-print("-" * 20)
-print(f"{mean_auc=}")
-print(f"{mean_accuracy=}")
-print(f"{mean_f1=}")
-print(f"{mean_precision=}")
-print(f"{mean_recall=}")
-print("-" * 20)
+    # reducer = umap.UMAP()
+    # embedding = reducer.fit_transform(X)
+    # sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], hue=y)
+    # plt.show()
+    # exit()
 
-ax.plot(
-    mean_fpr,
-    mean_tpr,
-    color="b",
-    lw=2,
-    alpha=0.8,
-)
-plt.show()
+    test_size = 0.2
+    random_state = 42
 
-# exit()
-# with mlflow.start_run():
-#     mlflow.log_params(params_xgb)
+    label_encoder = LabelEncoder().fit(y)
+    print(label_encoder.classes_, "[0, 1]")
 
-#     mlflow.log_metric("auc", mean_auc)
-#     mlflow.log_metric("accuracy", mean_accuracy)
-#     mlflow.log_metric("f1", mean_f1)
-#     mlflow.log_metric("precision", mean_precision)
-#     mlflow.log_metric("recall", mean_recall)
+    y = label_encoder.transform(y)
 
-#     mlflow.set_tag("Training Info", "Basic LR model for iris data")
+    ml_models_fdir = Path("models")
 
-#     signature = infer_signature(X_train, model.predict(X_train))
+    # ----------------------------------------------------------------------------------------
+    if use_CV:
+        cv = StratifiedKFold(n_splits=5)
+    else:
+        X_train_, X_val, y_train_, y_val = train_test_split(X, y)
 
-#     model_info = mlflow.xgboost.log_model(
-#         xgb_model=model,
-#         artifact_path=f"{sex}_data",
-#         signature=signature,
-#         input_example=X_train,
-#         # registered_model_name="tracking-quickstart",
-#     )
-#     mlflow.shap.log_explanation(shap.Explainer(model).shap_values, X_train)
+    mean_fpr = np.linspace(0, 1, 100)
+    tprs = []
+    accuracies = []
+    f1 = []
+    precisions = []
+    recalls = []
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    for i, (train, val) in tqdm(enumerate(cv.split(X, y))):
+        X_train = X[train]
+        y_train = y[train]
+        X_test = X[val]
+        y_test = y[val]
+
+        train_scaler = StandardScaler().fit(X_train)
+        test_scaler = StandardScaler().fit(X_test)
+
+        X_train = train_scaler.transform(X_train)
+        X_test = test_scaler.transform(X_test)
+
+        X_train_ = X_train
+        y_train_ = y_train
+        X_val = X_test
+        y_val = y_test
+
+        if model_type == 'xgboost':
+            model = xgb.XGBClassifier(**model_params)
+            model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
+
+        if model_type == 'catboost':
+            model = CatBoostClassifier(**model_params)
+            model.fit(X_train_, y_train_,
+                      eval_set=(X_val, y_val),
+                      verbose=False,
+                      use_best_model=True,
+                      plot=False,
+                      early_stopping_rounds=20)
+
+        if not (ml_models_fdir / model_type).is_dir():
+            (ml_models_fdir / model_type).mkdir()
+
+        pred = model.predict(X_test)
+        pred_prob = model.predict_proba(X_test)
+
+        viz = RocCurveDisplay.from_predictions(
+            y_test, pred_prob[:, 1],
+            ax=ax,
+        )
+
+        interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
+        interp_tpr[0] = 0
+        tprs.append(interp_tpr)
+
+        accuracies.append(accuracy_score(y_test, pred))
+        f1.append(f1_score(y_test, pred))
+        precisions.append(precision_score(y_test, pred))
+        recalls.append(recall_score(y_test, pred))
+
+        saved_model_filename = f"geuvadis_fold{i}_{sex}.json"
+        model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
+
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_tpr[-1] = 1.0
+
+    mean_auc = auc(mean_fpr, mean_tpr)
+    mean_accuracy = np.mean(accuracies)
+    mean_f1 = np.mean(f1)
+    mean_precision = np.mean(precisions)
+    mean_recall = np.mean(recalls)
+
+    print("-" * 20)
+    print(f"{mean_auc=}")
+    print(f"{mean_accuracy=}")
+    print(f"{mean_f1=}")
+    print(f"{mean_precision=}")
+    print(f"{mean_recall=}")
+    print("-" * 20)
+
+    ax.plot(
+        mean_fpr,
+        mean_tpr,
+        color="b",
+        lw=2,
+        alpha=0.8,
+    )
+    plt.show()
+
+    # exit()
+    # with mlflow.start_run():
+    #     mlflow.log_params(params_xgb)
+
+    #     mlflow.log_metric("auc", mean_auc)
+    #     mlflow.log_metric("accuracy", mean_accuracy)
+    #     mlflow.log_metric("f1", mean_f1)
+    #     mlflow.log_metric("precision", mean_precision)
+    #     mlflow.log_metric("recall", mean_recall)
+
+    #     mlflow.set_tag("Training Info", "Basic LR model for iris data")
+
+    #     signature = infer_signature(X_train, model.predict(X_train))
+
+    #     model_info = mlflow.xgboost.log_model(
+    #         xgb_model=model,
+    #         artifact_path=f"{sex}_data",
+    #         signature=signature,
+    #         input_example=X_train,
+    #         # registered_model_name="tracking-quickstart",
+    #     )
+    #     mlflow.shap.log_explanation(shap.Explainer(model).shap_values, X_train)
