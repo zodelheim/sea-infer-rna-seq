@@ -36,21 +36,28 @@ feature_importance_method = 'SHAP'
 
 n_threads = 6
 
-for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
+value_to_predict = 'Sex'
+value_to_predict = 'Experimental_Factor:_population (exp)'
+
+# for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
+for sex_chromosome in ['chrXY']:
 
     with open(f'models/{model_type}.json', 'r') as file:
         model_params = json.load(file)
-    print(model_params)
-    data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
+
+    # print(model_params)
+    data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex_chromosome)
 
     data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header")
 
     # --------------------------------------------------------------------------------
     X = data.values
-    y = data_header['Sex']
+    y = data_header[value_to_predict]
 
     label_encoder = LabelEncoder().fit(y)
     y = label_encoder.transform(y)
+
+    class_names = label_encoder.classes_
 
     feature_importance_df = pd.DataFrame(
         np.zeros(shape=(len(data.columns), 3), dtype=int),
@@ -91,6 +98,10 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
         y_val = y_test
 
         if model_type == 'xgboost':
+            if y.max() > 1:
+                model_params["objective"] = "multi:softmax"
+                # model_params['num_class'] = y.max() + 1
+
             model = xgb.XGBClassifier(**model_params)
             model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
@@ -112,11 +123,22 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
         shap_values = explainer.shap_values(X_train)
         importances_shap = np.abs(shap_values).mean(axis=0)
 
-        feature_importance_ = pd.DataFrame({
-            'Feature': data.columns,
-            'SHAP': importances_shap,
-            "native": importances_native
-        })
+        if len(importances_shap.shape) > 1:
+            importances_dict = {
+                'Feature': data.columns,
+                'SHAP': importances_shap.sum(axis=1),
+                "native": importances_native
+            }
+            for idx, value in enumerate(class_names):
+                importances_dict[f'SHAP_{value}'] = importances_shap[:, idx]
+        else:
+            importances_dict = {
+                'Feature': data.columns,
+                'SHAP': importances_shap,
+                "native": importances_native
+            }
+
+        feature_importance_ = pd.DataFrame(importances_dict)
 
         for fe in ['SHAP', "native"]:
 
@@ -128,39 +150,40 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
             for feature in features:
                 feature_importance_df.loc[feature, fe] += 1
 
-        viz = RocCurveDisplay.from_predictions(
-            y_test, pred_prob[:, 1],
-            ax=ax,
-        )
+        if len(class_names) == 1:
 
-        interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
-        interp_tpr[0] = 0
-        tprs.append(interp_tpr)
+            viz = RocCurveDisplay.from_predictions(
+                y_test, pred_prob[:, 1],
+                ax=ax,
+            )
 
-        accuracies.append(accuracy_score(y_test, pred))
-        f1.append(f1_score(y_test, pred))
-        precisions.append(precision_score(y_test, pred))
-        recalls.append(recall_score(y_test, pred))
+            interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
+            interp_tpr[0] = 0
+            tprs.append(interp_tpr)
 
-    # plt.show()
+            accuracies.append(accuracy_score(y_test, pred))
+            f1.append(f1_score(y_test, pred))
+            precisions.append(precision_score(y_test, pred))
+            recalls.append(recall_score(y_test, pred))
 
-    mean_tpr = np.mean(tprs, axis=0)
-    mean_tpr[-1] = 1.0
+    if len(class_names) == 1:
+        mean_tpr = np.mean(tprs, axis=0)
+        mean_tpr[-1] = 1.0
 
-    mean_auc = auc(mean_fpr, mean_tpr)
-    mean_accuracy = np.mean(accuracies)
-    mean_f1 = np.mean(f1)
-    mean_precision = np.mean(precisions)
-    mean_recall = np.mean(recalls)
+        mean_auc = auc(mean_fpr, mean_tpr)
+        mean_accuracy = np.mean(accuracies)
+        mean_f1 = np.mean(f1)
+        mean_precision = np.mean(precisions)
+        mean_recall = np.mean(recalls)
 
-    print(sex)
-    print("-" * 20)
-    print(f"{mean_auc=}")
-    print(f"{mean_accuracy=}")
-    print(f"{mean_f1=}")
-    print(f"{mean_precision=}")
-    print(f"{mean_recall=}")
-    print("-" * 20)
+        print(sex_chromosome)
+        print("-" * 20)
+        print(f"{mean_auc=}")
+        print(f"{mean_accuracy=}")
+        print(f"{mean_f1=}")
+        print(f"{mean_precision=}")
+        print(f"{mean_recall=}")
+        print("-" * 20)
 
     feature_importance_df = feature_importance_df.sort_values(by='SHAP',
                                                               ascending=False)
@@ -174,14 +197,19 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
 
     # feature_importance_df.to_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv')
     feature_importance_df.to_hdf(
-        fdir_processed / f'feature_importance.{model_type}.sex.h5',
-        key=f'{sex}',
+        fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.h5',
+        key=f'{sex_chromosome}',
         format='f'
     )
 
+    print("\n")
+    print(model_type)
+    print(model_params)
+    print("\n")
+
     continue
 
-    feature_importance_df = pd.read_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv', index_col=0)
+    feature_importance_df = pd.read_csv(fdir_processed / f'feature_importance.{model_type}.{sex_chromosome}.csv', index_col=0)
     # features = feature_importance_df['Feature']
     features = feature_importance_df.index
 
