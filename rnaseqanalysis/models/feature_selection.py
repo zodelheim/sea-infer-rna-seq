@@ -15,6 +15,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, RocCurveDi
 from sklearn.feature_selection import RFECV
 import mlflow
 import shap
+import json
 
 from tqdm import tqdm
 
@@ -30,48 +31,20 @@ model_type = 'xgboost'
 # sex = 'chrXY'
 # sex = 'autosome'
 
+feature_importance_method = 'native'
+feature_importance_method = 'SHAP'
+
+n_threads = 6
+
 for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
 
-    feature_importance_method = 'native'
-    feature_importance_method = 'shap'
-
-    n_threads = 6
-    params_xgb = {
-        # "early_stopping_rounds": 20,
-        "n_jobs": n_threads,
-        "objective": 'binary:logistic',
-        "n_estimators": 500,
-        'device': 'cuda',
-        'eta': 0.05,
-        "gamma": 1e-6,
-        'max_depth': 3,
-        # 'verbosity': 0
-    }
-
-    params_catboost = {
-        "loss_function": 'Logloss',  # MultiClass
-        "od_pval": 0.05,
-        "thread_count": n_threads,
-        "task_type": "GPU",
-        "iterations": 500,
-        "learning_rate": 0.03
-        #  devices='0'
-    }
+    with open(f'models/{model_type}.json', 'r') as file:
+        model_params = json.load(file)
 
     data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
 
-    # data = pd.read_csv(fdir_traintest / f'geuvadis.preprocessed.10_features.{sex}.csv', index_col=0)
-
     data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header")
-    # print(data_header)
-    # exit()
-    # data_header = data_header[[
-    #     'Sex',
-    #     # 'Experimental_Factor:_population (exp)'
-    # ]]
-    # data_header = data_header.loc[data.index]
 
-    # data[data < -12] = pd.NA
     # --------------------------------------------------------------------------------
     X = data.values
     y = data_header['Sex']
@@ -79,13 +52,18 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
     label_encoder = LabelEncoder().fit(y)
     y = label_encoder.transform(y)
 
-    feature_importance_dict = {}
+    feature_importance_df = pd.DataFrame(
+        np.zeros(shape=(len(data.columns), 3), dtype=int),
+        columns=['Feature', 'native', 'SHAP']
+    )
+    feature_importance_df['Feature'] = data.columns
+    feature_importance_df.set_index("Feature", inplace=True)
+
     n_features_is_subset = 100
     n_features_to_print = 30
 
     # cv = StratifiedKFold(n_splits=5)
     cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=10)
-    # X_train_, X_val, y_train_, y_val = train_test_split(X_train, y_train, shuffle=True)
 
     mean_fpr = np.linspace(0, 1, 100)
     tprs = []
@@ -107,20 +85,17 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
         X_train = train_scaler.transform(X_train)
         X_test = test_scaler.transform(X_test)
 
-        # y_train = label_encoder.transform(y_train)
-        # y_test = label_encoder.transform(y_test)
-
         X_train_ = X_train
         y_train_ = y_train
         X_val = X_test
         y_val = y_test
 
         if model_type == 'xgboost':
-            model = xgb.XGBClassifier(**params_xgb)
+            model = xgb.XGBClassifier(**model_params)
             model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
         if model_type == 'catboost':
-            model = CatBoostClassifier(**params_catboost)
+            model = CatBoostClassifier(**model_params)
             model.fit(X_train_, y_train_,
                       eval_set=(X_val, y_val),
                       verbose=False,
@@ -131,49 +106,27 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
         pred = model.predict(X_test)
         pred_prob = model.predict_proba(X_test)
 
-        # ConfusionMatrixDisplay(
-        #     confusion_matrix(y_test,
-        #                      pred)
-        # )  # .plot()
+        importances_native = model.feature_importances_
 
-        # viz = RocCurveDisplay.from_predictions(
-        #     y_test, pred_prob[:, 1]
-        # )
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_train)
+        importances_shap = np.abs(shap_values).mean(axis=0)
 
-        if feature_importance_method == 'native':
-            importances = model.feature_importances_
-        if feature_importance_method == 'shap':
-            # importances = model.feature_importances_
-            explainer = shap.TreeExplainer(model)
-            shap_values = explainer.shap_values(X_train)
-            importances = np.abs(shap_values).mean(axis=0)
-
-        feature_importance_df = pd.DataFrame({
+        feature_importance_ = pd.DataFrame({
             'Feature': data.columns,
-            'Importance': importances
-            # 'Importance': XGB.feature_importances_
+            'SHAP': importances_shap,
+            "native": importances_native
         })
-        feature_importance_df = feature_importance_df.sort_values(
-            by='Importance', ascending=False)
-        # plt.show()
 
-        features = feature_importance_df['Feature'].iloc[:n_features_is_subset].values
-        for feature in features:
-            if feature not in feature_importance_dict.keys():
-                feature_importance_dict[feature] = 0
+        for fe in ['SHAP', "native"]:
 
-            feature_importance_dict[feature] += 1
+            feature_importance_ = feature_importance_.sort_values(
+                by=fe, ascending=False)
 
-            # print(feature_importance_df.iloc[:20])
+            features = feature_importance_["Feature"].iloc[:n_features_is_subset].values
 
-            # sns.barplot(feature_importance_df.iloc[:30],
-            #             x='Importance', y="Feature")
-            # plt.show()
-
-            # n_features = 10
-            # data = data[feature_importance_df["Feature"].iloc[:n_features]]
-
-            # data.to_csv(fdir_traintest / f'geuvadis.preprocessed.{n_features}_features.{sex}.csv')
+            for feature in features:
+                feature_importance_df[fe].loc[feature] += 1
 
         viz = RocCurveDisplay.from_predictions(
             y_test, pred_prob[:, 1],
@@ -209,14 +162,24 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
     print(f"{mean_recall=}")
     print("-" * 20)
 
-    feature_importance_df = pd.Series(feature_importance_dict)
-    feature_importance_df = feature_importance_df.sort_values(ascending=False)
-
+    feature_importance_df = feature_importance_df.sort_values(by='SHAP',
+                                                              ascending=False)
+    print('features by SHAP')
     print(feature_importance_df.iloc[:n_features_to_print])
 
-    feature_importance_df.to_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv')
+    feature_importance_df = feature_importance_df.sort_values(by='native',
+                                                              ascending=False)
+    print('features by model.feature_importances_')
+    print(feature_importance_df.iloc[:n_features_to_print])
 
-    # exit()
+    # feature_importance_df.to_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv')
+    feature_importance_df.to_hdf(
+        fdir_processed / f'feature_importance.{model_type}.sex.h5',
+        key=f'{sex}',
+        format='f'
+    )
+
+    continue
 
     feature_importance_df = pd.read_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv', index_col=0)
     # features = feature_importance_df['Feature']
