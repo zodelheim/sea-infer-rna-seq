@@ -126,7 +126,7 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
             features = feature_importance_["Feature"].iloc[:n_features_is_subset].values
 
             for feature in features:
-                feature_importance_df[fe].loc[feature] += 1
+                feature_importance_df.loc[feature, fe] += 1
 
         viz = RocCurveDisplay.from_predictions(
             y_test, pred_prob[:, 1],
