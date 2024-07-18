@@ -26,10 +26,15 @@ use_CV = True
 model_type = 'catboost'
 model_type = 'xgboost'
 
+#! SHOLD BE THE SAME AS IN train_model.py
+feature_importance_method = 'native'
+# feature_importance_method = 'SHAP'
+
 # sex = 'chrXY'
 # sex = 'chrX'
 # sex = 'chrY'
 # sex = 'autosome'
+n_features = 50
 
 for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
@@ -39,45 +44,14 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     print(sex)
     print("*" * 20)
 
-    # n_threads = 6
-    # params_xgb = {
-    #     # "early_stopping_rounds": 20,
-    #     "n_jobs": n_threads,
-    #     "objective": 'binary:logistic',
-    #     "n_estimators": 500,
-    #     'device': 'cuda',
-    #     'eta': 0.05,
-    #     'max_depth': 3,
-    #     "gamma": 1e-6,
-    #     # 'verbosity': 0
-    #     # "booster": "dart",
-    # }
-
-    # params_catboost = {
-    #     "loss_function": 'Logloss',  # MultiClass
-    #     "od_pval": 0.05,
-    #     "thread_count": n_threads,
-    #     "task_type": "GPU",
-    #     "iterations": 500,
-    #     "learning_rate": 0.03
-    #     #  devices='0'
-    # }
-
     with open(f'models/{model_type}.json', 'r') as file:
         model_params = json.load(file)
 
     if model_type == 'xgboost':
         model = xgb.XGBClassifier(**model_params)
-        # model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
     if model_type == 'catboost':
         model = CatBoostClassifier(**model_params)
-        # model.fit(X_train_, y_train_,
-        #           eval_set=(X_val, y_val),
-        #           verbose=False,
-        #           use_best_model=True,
-        #           plot=False,
-        #           early_stopping_rounds=20)
 
     fname = Path("heart.merged.TPM.processed.h5")
 
@@ -88,15 +62,12 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
     # data_heart[data_heart < -12] = pd.NA
 
-    features = pd.read_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv', index_col=0)
-    features = features.loc[features.index.intersection(data_heart.columns)]
-    features = features.sort_values(ascending=False, by="0")
-    n_features = 50
+    features = pd.read_hdf(fdir_processed / f'feature_importance.{model_type}.sex.h5', key=sex)
+
+    features = features.loc[features.index.intersection(data_heart.columns), feature_importance_method]
+    features = features.sort_values(ascending=False)
     # print(features.iloc[:n_features].index)
     data_heart = data_heart[features.iloc[:n_features].index]
-
-    # data_heart.to_csv(fdir_external / 'HEART' / 'reg' / "heart.merged.TMP.preprocessed.important_features.csv")
-    # print(model)
 
     X = data_heart.values
     y = data_heart_header['sex'].values

@@ -31,7 +31,9 @@ model_type = 'catboost'
 model_type = 'xgboost'
 
 feature_importance_method = 'native'
-# feature_importance_method = 'SHAP'
+feature_importance_method = 'SHAP'
+
+n_features = 50
 
 for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
@@ -43,7 +45,6 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     with open(f'models/{model_type}.json', 'r') as file:
         model_params = json.load(file)
 
-    n_features = 50
     data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
     features = pd.read_hdf(
         fdir_processed / f'feature_importance.{model_type}.sex.h5',
