@@ -31,19 +31,25 @@ def logarithmization(df: pd.DataFrame):
     return df
 
 
-fdir_raw = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/raw/")
-fdir_processed = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/interim")
-fdir_traintest = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/processed")
-fdir_external = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/external")
+fdir_raw = Path("data/raw/")
+fdir_processed = Path("data/interim")
+fdir_traintest = Path("data/processed")
+fdir_external = Path("data/external")
 
 
-fname = Path("heart.merged.TPM.txt")
-data = pd.read_csv(fdir_external / 'HEART' / 'reg' / fname, sep='\t').T
-data_header = pd.read_csv(fdir_external / 'HEART' / 'reg' / 'SraRunTable.txt', sep=',')
-print(data_header.columns)
+for subdir in ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1"]:
 
-data = filter_zero_median(data)
-print(data.shape)
-data = logarithmization(data)
+    # fname = Path("heart.merged.TPM.txt")
+    fname = next((fdir_external / subdir / 'reg').glob("*.txt"))
+    fname = fname.name
 
-data.to_csv(fdir_external / 'HEART' / 'reg' / "heart.merged.TPM.preprocessed.csv")
+    data = pd.read_csv(fdir_external / subdir / 'reg' / fname, sep='\t').T
+    data_header = pd.read_csv(fdir_external / subdir / 'reg' / 'SraRunTable.txt', sep=',')
+    print(data_header.columns)
+    data = filter_zero_median(data)
+    print(data.shape)
+    data = logarithmization(data)
+    data = data.astype(np.float32)
+
+    data.to_hdf((fdir_external / subdir / 'reg' / fname).with_suffix('.processed.h5'),
+                key='processed', format='f')
