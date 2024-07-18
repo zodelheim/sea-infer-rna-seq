@@ -31,7 +31,7 @@ model_type = 'catboost'
 model_type = 'xgboost'
 
 feature_importance_method = 'native'
-feature_importance_method = 'shap'
+# feature_importance_method = 'SHAP'
 
 for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
@@ -47,14 +47,17 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
     features = pd.read_hdf(
         fdir_processed / f'feature_importance.{model_type}.sex.h5',
-        key=f'{sex}/{feature_importance_method}',
+        key=f'{sex}',
     )
+
+    features = features[feature_importance_method]
+    features = features.sort_values(ascending=False)
 
     print(features.iloc[:n_features])
 
     data_heart = pd.read_hdf(fdir_external / 'HEART' / 'reg' / "heart.merged.TPM.processed.h5", index_col=0)
     features = features.loc[features.index.intersection(data_heart.columns)]
-    features = features.sort_values(ascending=False, by="0")
+    features = features.sort_values(ascending=False)
     print(features.iloc[:n_features])
 
     data = data[features.iloc[:n_features].index]
