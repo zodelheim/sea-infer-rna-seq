@@ -40,7 +40,7 @@ for sex in ['chrXY', 'autosome', 'chrX', 'chrY']:
 
     with open(f'models/{model_type}.json', 'r') as file:
         model_params = json.load(file)
-
+    print(model_params)
     data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
 
     data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header")

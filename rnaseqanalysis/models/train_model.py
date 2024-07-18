@@ -35,6 +35,8 @@ feature_importance_method = 'SHAP'
 
 n_features = 50
 
+organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][3]
+
 for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
     print("*" * 20)
@@ -54,12 +56,15 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     features = features[feature_importance_method]
     features = features.sort_values(ascending=False)
 
-    print(features.iloc[:n_features])
+    if organ != "None":
+        # print(features.iloc[:n_features])
+        fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
+        fname = fname.name
 
-    data_heart = pd.read_hdf(fdir_external / 'HEART' / 'reg' / "heart.merged.TPM.processed.h5", index_col=0)
-    features = features.loc[features.index.intersection(data_heart.columns)]
-    features = features.sort_values(ascending=False)
-    print(features.iloc[:n_features])
+        data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
+        features = features.loc[features.index.intersection(data_eval.columns)]
+        features = features.sort_values(ascending=False)
+        print(features.iloc[:n_features])
 
     data = data[features.iloc[:n_features].index]
 
@@ -84,6 +89,8 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     label_encoder = LabelEncoder().fit(y)
     print(label_encoder.classes_, "[0, 1]")
 
+    print(dir(label_encoder))
+    exit()
     y = label_encoder.transform(y)
 
     ml_models_fdir = Path("models")
@@ -152,7 +159,7 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
         precisions.append(precision_score(y_test, pred))
         recalls.append(recall_score(y_test, pred))
 
-        saved_model_filename = f"geuvadis_fold{i}_{sex}.json"
+        saved_model_filename = f"geuvadis_fold{i}_{sex}_calibration_{organ}.json"
         model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
 
     mean_tpr = np.mean(tprs, axis=0)

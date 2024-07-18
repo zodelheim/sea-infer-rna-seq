@@ -26,9 +26,11 @@ use_CV = True
 model_type = 'catboost'
 model_type = 'xgboost'
 
+organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][3]
+
 #! SHOLD BE THE SAME AS IN train_model.py
-feature_importance_method = 'native'
-# feature_importance_method = 'SHAP'
+# feature_importance_method = 'native'
+feature_importance_method = 'SHAP'
 
 # sex = 'chrXY'
 # sex = 'chrX'
@@ -53,24 +55,27 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     if model_type == 'catboost':
         model = CatBoostClassifier(**model_params)
 
-    fname = Path("heart.merged.TPM.processed.h5")
+    fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
+    fname = fname.name
 
-    data_heart = pd.read_hdf(fdir_external / 'HEART' / 'reg' / fname, index_col=0)
+    data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
 
-    data_heart_header = pd.read_csv(fdir_external / 'HEART' / 'reg' / 'SraRunTable.txt', sep=',')
-    print('ground true: ', (data_heart_header['sex'].values == 'male').astype(int))
+    data_eval_header = pd.read_csv(fdir_external / organ / 'reg' / 'SraRunTable.txt', sep=',')
+    # data_eval_header = data_eval_header.loc(data_eval.index)
+    print(data_eval_header.columns)
+    print('ground true: ', (data_eval_header['Sex'].values == 'male').astype(int))
 
     # data_heart[data_heart < -12] = pd.NA
 
     features = pd.read_hdf(fdir_processed / f'feature_importance.{model_type}.sex.h5', key=sex)
 
-    features = features.loc[features.index.intersection(data_heart.columns), feature_importance_method]
+    features = features.loc[features.index.intersection(data_eval.columns), feature_importance_method]
     features = features.sort_values(ascending=False)
     # print(features.iloc[:n_features].index)
-    data_heart = data_heart[features.iloc[:n_features].index]
+    data_eval = data_eval[features.iloc[:n_features].index]
 
-    X = data_heart.values
-    y = data_heart_header['sex'].values
+    X = data_eval.values
+    y = data_eval_header['sex'].values
 
     label_encoder = LabelEncoder().fit(y)
     print(label_encoder.classes_, "[0, 1]")
@@ -79,6 +84,7 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
     train_scaler = StandardScaler().fit(X)
     X = StandardScaler().fit_transform(X)
+
     proba = np.zeros(shape=(X.shape[0], 2))
     pred = np.zeros(shape=(X.shape[0]))
 
@@ -94,9 +100,9 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
         proba += model.predict_proba(X)
 
         pred_ = model.predict(X)
-        if sex == 'autosome':
-            pred_ = np.abs(pred_ - 1)
-            # print(pred_)
+        # if sex == 'autosome':
+        #     pred_ = np.abs(pred_ - 1)
+        # print(pred_)
         pred += pred_
 
         accuracies.append(accuracy_score(y, pred_))
@@ -107,7 +113,7 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     proba = proba / 5
     # pred = pred / 5
     if sex == 'autosome':
-        print('predicted:   ', (proba[:, 0] > 0.5).astype(int))
+        print('predicted:   ', (proba[:, 1] > 0.5).astype(int))
     else:
         print('predicted:   ', (proba[:, 1] > 0.5).astype(int))
     # print(pred.astype(int))

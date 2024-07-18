@@ -36,20 +36,27 @@ fdir_processed = Path("data/interim")
 fdir_traintest = Path("data/processed")
 fdir_external = Path("data/external")
 
-
-for subdir in ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1"]:
+for organ in ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1"]:
 
     # fname = Path("heart.merged.TPM.txt")
-    fname = next((fdir_external / subdir / 'reg').glob("*.txt"))
-    fname = fname.name
+    if "BRAIN1" in organ:
+        fname = next((fdir_external / organ / 'reg').glob("*.csv"))
+        fname = fname.name
+        print(fname)
+        data = pd.read_csv(fdir_external / organ / 'reg' / fname, sep=',', index_col=0).T
+    else:
+        fname = next((fdir_external / organ / 'reg').glob("*TPM.txt"))
+        fname = fname.name
+        print(fname)
+        data = pd.read_csv(fdir_external / organ / 'reg' / fname, sep='\t').T
 
-    data = pd.read_csv(fdir_external / subdir / 'reg' / fname, sep='\t').T
-    data_header = pd.read_csv(fdir_external / subdir / 'reg' / 'SraRunTable.txt', sep=',')
-    print(data_header.columns)
+
+    data_header = pd.read_csv(fdir_external / organ / 'reg' / 'SraRunTable.txt', sep=',')
+    # print(data_header.columns)
     data = filter_zero_median(data)
     print(data.shape)
     data = logarithmization(data)
     data = data.astype(np.float32)
-
-    data.to_hdf((fdir_external / subdir / 'reg' / fname).with_suffix('.processed.h5'),
+    print(data)
+    data.to_hdf((fdir_external / organ / 'reg' / fname).with_suffix('.processed.h5'),
                 key='processed', format='f')
