@@ -37,10 +37,10 @@ feature_importance_method = 'SHAP'
 n_threads = 6
 
 value_to_predict = 'Sex'
-value_to_predict = 'Experimental_Factor:_population (exp)'
+# value_to_predict = 'Experimental_Factor:_population (exp)'
 
-# for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
-for sex_chromosome in ['chrXY']:
+for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
+    # for sex_chromosome in ['chrXY']:
 
     with open(f'models/{model_type}.json', 'r') as file:
         model_params = json.load(file)
