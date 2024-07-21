@@ -109,35 +109,35 @@ def filter_cv_q34(data: pd.DataFrame):
 def locate_sex_transcripts(gtf_data: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
 
     # from https://www.ensembl.org/info/genome/genebuild/human_PARS.html
-    pseudoautosoms_Y1 = [10000, 2781479]
-    pseudoautosoms_X1 = [10000, 2781479]
-    pseudoautosoms_Y2 = [56887902, 57217415]
-    pseudoautosoms_X2 = [155701382, 156030895]
 
-    transcripts_x = gtf_data.loc[gtf_data['seqname'] == 'chrX']  # , 'transcript_id'
-    transcripts_y = gtf_data.loc[gtf_data['seqname'] == 'chrY']  # , 'transcript_id'
+    pseudoautosoms_Y1 = [10001, 2781479]
+    pseudoautosoms_X1 = [10001, 2781479]
+    pseudoautosoms_Y2 = [56887903, 57217415]
+    pseudoautosoms_X2 = [155701383, 156030895]
 
-    pseudoauto_tr1 = (transcripts_x.loc[(transcripts_x['start'] >= pseudoautosoms_X1[0]) & (transcripts_x['end'] <= pseudoautosoms_X1[0])]).index
-    pseudoauto_tr2 = (transcripts_y.loc[(transcripts_y['start'] >= pseudoautosoms_Y1[0]) & (transcripts_y['end'] <= pseudoautosoms_Y1[0])]).index
-    pseudoauto_tr3 = (transcripts_x.loc[(transcripts_x['start'] >= pseudoautosoms_X2[0]) & (transcripts_x['end'] <= pseudoautosoms_X2[0])]).index
-    pseudoauto_tr4 = (transcripts_y.loc[(transcripts_y['start'] >= pseudoautosoms_Y2[0]) & (transcripts_y['end'] <= pseudoautosoms_Y2[0])]).index
+    transcripts_x = gtf_data.loc[gtf_data['seqname'] == 'chrX']
+    transcripts_y = gtf_data.loc[gtf_data['seqname'] == 'chrY']
 
-    pseudoautosom_transcripts = pseudoauto_tr1.union(pseudoauto_tr2).union(pseudoauto_tr3).union(pseudoauto_tr4)
+    true_transcripts_x = transcripts_x.loc[((transcripts_x['end'] < pseudoautosoms_X1[0])
+                                            | ((transcripts_x["start"] > pseudoautosoms_X1[1]) & (transcripts_x["end"] < pseudoautosoms_X2[0]))
+                                            | (transcripts_x["start"] > pseudoautosoms_X2[1])
+                                            )]
 
-    gtf_data = gtf_data.drop(index=pseudoautosom_transcripts)
+    true_transcripts_y = transcripts_y.loc[((transcripts_y['end'] < pseudoautosoms_Y1[0])
+                                            | ((transcripts_y["start"] > pseudoautosoms_Y1[1]) & (transcripts_y["end"] < pseudoautosoms_Y2[0]))
+                                            | (transcripts_y["start"] > pseudoautosoms_Y2[1])
+                                            )]
 
-    transcripts_x = gtf_data.loc[gtf_data['seqname'] == 'chrX', 'transcript_id']
-    transcripts_y = gtf_data.loc[gtf_data['seqname'] == 'chrY', 'transcript_id']
+    transcripts_x = transcripts_x['transcript_id'].unique()
+    transcripts_y = transcripts_y['transcript_id'].unique()
 
-    transcripts_x = transcripts_x.unique()
-    transcripts_y = transcripts_y.unique()
-    print('# chrX transcripts: ', len(transcripts_x))
-    print('# chrY transcripts: ', len(transcripts_y))
+    true_transcripts_x = true_transcripts_x['transcript_id'].unique()
+    true_transcripts_y = true_transcripts_y['transcript_id'].unique()
 
-    return transcripts_x, transcripts_y
+    return true_transcripts_x, true_transcripts_y
 
 
-@ task(log_prints=True, description='drop sex (chrX, chrY) transcripts from data')
+@task(log_prints=True, description='drop sex (chrX, chrY) transcripts from data')
 def remove_sex_transcripts(data: pd.DataFrame, gtf_data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     transcripts_x, transcripts_y = locate_sex_transcripts(gtf_data)
