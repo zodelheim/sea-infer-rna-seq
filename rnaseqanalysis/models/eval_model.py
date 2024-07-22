@@ -26,7 +26,7 @@ use_CV = True
 model_type = 'catboost'
 model_type = 'xgboost'
 
-organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][2]
+organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][3]
 
 #! SHOLD BE THE SAME AS IN train_model.py
 # feature_importance_method = 'native'
@@ -63,7 +63,7 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     data_eval_header = pd.read_csv(fdir_external / organ / 'reg' / 'SraRunTable.txt', sep=',')
     # data_eval_header = data_eval_header.loc(data_eval.index)
     # print(data_eval_header.columns)
-    print('ground true: ', (data_eval_header['sex'].values == 'male').astype(int))
+    print('ground true: ', (data_eval_header['gender'].values == 'male').astype(int))
 
     features_fname = f"geuvadis_features_{sex}_calibration_{organ}.csv"
     features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
@@ -71,7 +71,7 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     data_eval = data_eval[features_list.index]
 
     X = data_eval.values
-    y = data_eval_header['sex'].values
+    y = data_eval_header['gender'].values
 
     label_encoder = LabelEncoder().fit(y)
     print(label_encoder.classes_, "[0, 1]")
@@ -84,6 +84,8 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     proba = np.zeros(shape=(X.shape[0], 2))
     pred = np.zeros(shape=(X.shape[0]))
 
+    mean_fpr = np.linspace(0, 1, 100)
+    tprs = []
     accuracies = []
     f1 = []
     precisions = []
@@ -104,6 +106,14 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
         precisions.append(precision_score(y, pred_))
         recalls.append(recall_score(y, pred_))
 
+        viz = RocCurveDisplay.from_predictions(
+            y, model.predict_proba(X)[:, 1],
+            # ax=ax,
+        )
+        interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
+        interp_tpr[0] = 0
+        tprs.append(interp_tpr)
+
     proba = proba / 5
     # pred = pred / 5
     if sex == 'autosome':
@@ -112,12 +122,20 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
         print('predicted:   ', (proba[:, 1] > 0.5).astype(int))
     # print(pred.astype(int))
 
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_tpr[-1] = 1.0
+
+    mean_auc = auc(mean_fpr, mean_tpr)
     mean_accuracy = np.mean(accuracies)
     mean_f1 = np.mean(f1)
     mean_precision = np.mean(precisions)
     mean_recall = np.mean(recalls)
+
+    print("-" * 20)
+    print(f"{mean_auc=},")
     print(f"{mean_accuracy=},")
     print(f"{mean_f1=},")
     print(f"{mean_precision=},")
     print(f"{mean_recall=},")
+    print("-" * 20)
     print('```')
