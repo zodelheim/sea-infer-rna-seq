@@ -26,7 +26,7 @@ use_CV = True
 model_type = 'catboost'
 model_type = 'xgboost'
 
-organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][1]
+organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][2]
 
 #! SHOLD BE THE SAME AS IN train_model.py
 # feature_importance_method = 'native'
@@ -36,11 +36,8 @@ feature_importance_method = 'SHAP'
 # sex = 'chrX'
 # sex = 'chrY'
 # sex = 'autosome'
-n_features = 50
-
 
 value_to_predict = 'Sex'
-
 
 for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
