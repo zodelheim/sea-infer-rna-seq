@@ -3,8 +3,8 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-fdir_raw = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/raw/")
-fdir_processed = Path("/home/ar3/Documents/PYTHON/RNASeqAnalysis/data/interim")
+fdir_raw = Path("data/raw/")
+fdir_processed = Path("data/interim")
 
 
 gtf_rawdata = read_gtf(fdir_raw / 'all_transcripts_strigtie_merged.gtf')
