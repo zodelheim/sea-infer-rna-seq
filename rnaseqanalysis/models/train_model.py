@@ -15,6 +15,9 @@ from sklearn.decomposition import PCA
 import umap
 import json
 
+from sklearn.neighbors import KNeighborsClassifier
+
+
 from tqdm import tqdm
 
 # mlflow.set_tracking_uri(uri="http://localhost:8080")
@@ -30,15 +33,16 @@ use_CV = True
 
 model_type = 'catboost'
 model_type = 'xgboost'
+# model_type = 'knn'
 
 feature_importance_method = 'native'
 feature_importance_method = 'SHAP'
 
-n_features = 50
+n_features = 0
 
 value_to_predict = 'Sex'
 
-organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][1]
+organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][2]
 
 for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     # for sex in ['chrY']:
@@ -54,7 +58,7 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
 
     features = pd.read_hdf(
-        fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.h5',
+        fdir_processed / f'feature_importance.{"xgboost"}.{value_to_predict}.h5',
         key=f'{sex}',
     )
 
@@ -62,16 +66,21 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     features = features.sort_values(ascending=False)
 
     if organ != "None":
-        # print(features.iloc[:n_features])
         fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
         fname = fname.name
 
         data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
         features = features.loc[features.index.intersection(data_eval.columns)]
-        features = features.sort_values(ascending=False)
-        print(features.iloc[:n_features])
+        if n_features != 0:
+            features = features.sort_values(ascending=False)
+            print(features.iloc[:n_features])
+        else:
+            print(features.shape)
 
-    features_list = features.iloc[:n_features]
+    if n_features != 0:
+        features_list = features.iloc[:n_features]
+    else:
+        features_list = features
 
     features_fname = f"geuvadis_features_{sex}_calibration_{organ}.csv"
     features_list.to_csv(ml_models_fdir / model_type / features_fname)
@@ -147,6 +156,10 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
                       plot=False,
                       early_stopping_rounds=20)
 
+        if model_type == 'knn':
+            model = KNeighborsClassifier(**model_params)
+            model.fit(X_train_, y_train_)
+
         if not (ml_models_fdir / model_type).is_dir():
             (ml_models_fdir / model_type).mkdir()
 
@@ -168,7 +181,9 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
         recalls.append(recall_score(y_test, pred))
 
         saved_model_filename = f"geuvadis_fold{i}_{sex}_calibration_{organ}.json"
-        model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
+
+        if model_type is not 'knn':
+            model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
 
     mean_tpr = np.mean(tprs, axis=0)
     mean_tpr[-1] = 1.0
