@@ -141,19 +141,27 @@ def locate_sex_transcripts(gtf_data: pd.DataFrame) -> tuple[pd.Series, pd.Series
 def remove_sex_transcripts(data: pd.DataFrame, gtf_data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     transcripts_x, transcripts_y = locate_sex_transcripts(gtf_data)
+
     transcripts_x = transcripts_x.tolist()
     transcripts_y = transcripts_y.tolist()
 
-    data_noX = data.drop(columns=data.columns.intersection(transcripts_x))
-    data_noY = data.drop(columns=data.columns.intersection(transcripts_y))
-    data_noXY = data_noY.drop(columns=data.columns.intersection(transcripts_x))
+    transcripts_x = data.columns.intersection(transcripts_x)
+    transcripts_y = data.columns.intersection(transcripts_y)
 
-    print('dataXY shape: ', data.shape)
-    print('dataY shape: ', data_noX.shape)
-    print('dataX shape: ', data_noY.shape)
-    print('data_autosome shape: ', data_noXY.shape)
+    gtf_transcripts = gtf_data.loc[data.columns]
+    transcripts_autosomes = gtf_transcripts.loc[(gtf_transcripts['seqname'] != "chrX") & (gtf_transcripts['seqname'] != "chrY")].index
 
-    return data, data_noX, data_noY, data_noXY
+    data_XY = data
+    data_X = data[transcripts_x.union(transcripts_autosomes)]
+    data_Y = data[transcripts_y.union(transcripts_autosomes)]
+    data_autosomes = data[transcripts_autosomes]
+
+    print('dataXY shape: ', data_XY.shape)
+    print('dataX shape: ', data_X.shape)
+    print('dataY shape: ', data_Y.shape)
+    print('data_autosome shape: ', data_autosomes.shape)
+
+    return data_XY, data_X, data_Y, data_autosomes
 
     # # ----------------------------------- Remove sex chr transcripts -------------------------------------
     # # data = pd.read_csv(fdir_processed / 'geuvadis.preprocessed.csv', index_col=0)
@@ -172,7 +180,7 @@ def remove_sex_transcripts(data: pd.DataFrame, gtf_data: pd.DataFrame) -> tuple[
     # data.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrXY.csv')
 
 
-@ flow
+@flow
 def make_train_dataset():
 
     fdir_raw = Path("data/raw/")
@@ -184,9 +192,8 @@ def make_train_dataset():
         fdir_raw / 'Geuvadis.SraRunTable.txt',
         fdir_raw / 'all_transcripts_strigtie_merged.gtf'
     )
-
     data = filter_zero_median(data_raw)
-    # data = filter_correlated(data, data_header['Sex'].loc[data.index])
+    data = filter_correlated(data, data_header['Sex'].loc[data.index])
     data = logarithmization(data)
     data = filter_cv_threshold(data, 0.7)
 
@@ -194,7 +201,7 @@ def make_train_dataset():
     data = filter_cv_q34(data)
     data = data.astype(np.float32)
 
-    data, data_noX, data_noY, data_noXY = remove_sex_transcripts(data, gtf_data)
+    data_XY, data_X, data_Y, data_autosomes = remove_sex_transcripts(data, gtf_data)
 
     gtf_data = gtf_data.loc[data.columns]
     data_header = data_header.loc[data.index]
@@ -205,10 +212,10 @@ def make_train_dataset():
     data_header.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header", format='f')
     gtf_data.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="gtf", format='table')
 
-    data_noX.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrY', format='f')
-    data_noY.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrX', format='f')
-    data_noXY.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='autosome', format='f')
-    data.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrXY', format='f')
+    data_Y.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrY', format='f')
+    data_X.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrX', format='f')
+    data_autosomes.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='autosome', format='f')
+    data_XY.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrXY', format='f')
 
 
 if __name__ == "__main__":
