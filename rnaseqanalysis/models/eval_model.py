@@ -26,7 +26,7 @@ use_CV = True
 model_type = 'catboost'
 model_type = 'xgboost'
 
-organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][3]
+organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][1]
 
 #! SHOLD BE THE SAME AS IN train_model.py
 # feature_importance_method = 'native'
@@ -37,6 +37,10 @@ feature_importance_method = 'SHAP'
 # sex = 'chrY'
 # sex = 'autosome'
 n_features = 50
+
+
+value_to_predict = 'Sex'
+
 
 for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
 
@@ -59,20 +63,15 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     fname = fname.name
 
     data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
-
     data_eval_header = pd.read_csv(fdir_external / organ / 'reg' / 'SraRunTable.txt', sep=',')
     # data_eval_header = data_eval_header.loc(data_eval.index)
-    print(data_eval_header.columns)
-    print('ground true: ', (data_eval_header['Sex'].values == 'male').astype(int))
+    # print(data_eval_header.columns)
+    print('ground true: ', (data_eval_header['sex'].values == 'male').astype(int))
 
-    # data_heart[data_heart < -12] = pd.NA
+    features_fname = f"geuvadis_features_{sex}_calibration_{organ}.csv"
+    features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
 
-    features = pd.read_hdf(fdir_processed / f'feature_importance.{model_type}.sex.h5', key=sex)
-
-    features = features.loc[features.index.intersection(data_eval.columns), feature_importance_method]
-    features = features.sort_values(ascending=False)
-    # print(features.iloc[:n_features].index)
-    data_eval = data_eval[features.iloc[:n_features].index]
+    data_eval = data_eval[features_list.index]
 
     X = data_eval.values
     y = data_eval_header['sex'].values
@@ -94,15 +93,13 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     recalls = []
 
     for i in range(5):
-        saved_model_filename = f"geuvadis_fold{i}_{sex}.json"
+        saved_model_filename = f"geuvadis_fold{i}_{sex}_calibration_{organ}.json"
         model.load_model(fname=ml_models_fdir / model_type / saved_model_filename)
 
         proba += model.predict_proba(X)
-
         pred_ = model.predict(X)
         # if sex == 'autosome':
         #     pred_ = np.abs(pred_ - 1)
-        # print(pred_)
         pred += pred_
 
         accuracies.append(accuracy_score(y, pred_))
@@ -122,8 +119,8 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     mean_f1 = np.mean(f1)
     mean_precision = np.mean(precisions)
     mean_recall = np.mean(recalls)
-    print(f"{mean_accuracy=}")
-    print(f"{mean_f1=}")
-    print(f"{mean_precision=}")
-    print(f"{mean_recall=}")
+    print(f"{mean_accuracy=},")
+    print(f"{mean_f1=},")
+    print(f"{mean_precision=},")
+    print(f"{mean_recall=},")
     print('```')

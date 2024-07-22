@@ -24,6 +24,7 @@ fdir_raw = Path("data/raw/")
 fdir_processed = Path("data/interim")
 fdir_traintest = Path("data/processed") / 'sex'
 fdir_external = Path("data/external")
+ml_models_fdir = Path("models")
 
 use_CV = True
 
@@ -35,9 +36,12 @@ feature_importance_method = 'SHAP'
 
 n_features = 50
 
-organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][3]
+value_to_predict = 'Sex'
+
+organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][1]
 
 for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
+    # for sex in ['chrY']:
 
     print("*" * 20)
     print(model_type)
@@ -48,8 +52,9 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
         model_params = json.load(file)
 
     data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
+
     features = pd.read_hdf(
-        fdir_processed / f'feature_importance.{model_type}.sex.h5',
+        fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.h5',
         key=f'{sex}',
     )
 
@@ -66,7 +71,12 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
         features = features.sort_values(ascending=False)
         print(features.iloc[:n_features])
 
-    data = data[features.iloc[:n_features].index]
+    features_list = features.iloc[:n_features]
+
+    features_fname = f"geuvadis_features_{sex}_calibration_{organ}.csv"
+    features_list.to_csv(ml_models_fdir / model_type / features_fname)
+
+    data = data[features_list.index]
 
     data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key='header')
 
@@ -89,11 +99,9 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     label_encoder = LabelEncoder().fit(y)
     print(label_encoder.classes_, "[0, 1]")
 
-    print(dir(label_encoder))
-    exit()
+    # print(dir(label_encoder))
+    # exit()
     y = label_encoder.transform(y)
-
-    ml_models_fdir = Path("models")
 
     # ----------------------------------------------------------------------------------------
     if use_CV:
@@ -172,11 +180,11 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     mean_recall = np.mean(recalls)
 
     print("-" * 20)
-    print(f"{mean_auc=}")
-    print(f"{mean_accuracy=}")
-    print(f"{mean_f1=}")
-    print(f"{mean_precision=}")
-    print(f"{mean_recall=}")
+    print(f"{mean_auc=},")
+    print(f"{mean_accuracy=},")
+    print(f"{mean_f1=},")
+    print(f"{mean_precision=},")
+    print(f"{mean_recall=},")
     print("-" * 20)
 
     ax.plot(
