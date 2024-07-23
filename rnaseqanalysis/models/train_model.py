@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.metrics import make_scorer, accuracy_score, f1_score, roc_auc_score, precision_score, recall_score, classification_report
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier
 import xgboost as xgb
@@ -14,6 +14,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, RocCurveDi
 from sklearn.decomposition import PCA
 import umap
 import json
+import cupy
 
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -57,7 +58,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
 
         features = pd.read_hdf(
-            fdir_processed / f'feature_importance.{"xgboost"}.{value_to_predict}.h5',
+            fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
             key=f'{sex}',
         )
 
@@ -81,7 +82,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         else:
             features_list = features
 
-        features_fname = f"geuvadis_features_{sex}_calibration_{organ}.csv"
+        features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
         features_list.to_csv(ml_models_fdir / model_type / features_fname)
 
         data = data[features_list.index]
@@ -131,8 +132,11 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
             X_test = X[val]
             y_test = y[val]
 
-            train_scaler = StandardScaler().fit(X_train)
-            test_scaler = StandardScaler().fit(X_test)
+            # train_scaler = StandardScaler().fit(X_train)
+            # test_scaler = StandardScaler().fit(X_test)
+
+            train_scaler = RobustScaler().fit(X_train)
+            test_scaler = RobustScaler().fit(X_test)
 
             X_train = train_scaler.transform(X_train)
             X_test = test_scaler.transform(X_test)
@@ -144,7 +148,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 
             if model_type == 'xgboost':
                 model = xgb.XGBClassifier(**model_params)
-                model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
+                model.fit(cupy.array(X_train_), y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
             if model_type == 'catboost':
                 model = CatBoostClassifier(**model_params)
@@ -162,8 +166,8 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
             if not (ml_models_fdir / model_type).is_dir():
                 (ml_models_fdir / model_type).mkdir()
 
-            pred = model.predict(X_test)
-            pred_prob = model.predict_proba(X_test)
+            pred = model.predict(cupy.array(X_test))
+            pred_prob = model.predict_proba(cupy.array(X_test))
 
             viz = RocCurveDisplay.from_predictions(
                 y_test, pred_prob[:, 1],

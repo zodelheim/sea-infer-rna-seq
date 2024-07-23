@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.metrics import make_scorer, accuracy_score, f1_score, roc_auc_score, precision_score, recall_score, classification_report
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
 import argparse
 from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier
@@ -16,6 +16,7 @@ from sklearn.feature_selection import RFECV
 import mlflow
 import shap
 import json
+import cupy
 
 from tqdm import tqdm
 
@@ -42,10 +43,10 @@ n_threads = 6
 value_to_predict = 'Sex'
 # value_to_predict = 'Experimental_Factor:_population (exp)'
 
-organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][1]
+organ = ['BRAIN0', "HEART", "BRAIN1", 'None'][1]
 
-for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
-    # for sex_chromosome in ['chrXY']:
+# for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
+for sex_chromosome in ['chrY']:
 
     with open(f'models/{model_type}.json', 'r') as file:
         model_params = json.load(file)
@@ -54,7 +55,7 @@ for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
     data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex_chromosome)
     data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header")
 
-    feature_importance_df = pd.read_hdf(fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.h5',
+    feature_importance_df = pd.read_hdf(fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
                                         key=f'{sex_chromosome}',)
 
     features = feature_importance_df[feature_importance_method]
@@ -95,8 +96,8 @@ for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
         precision_array = []
         recall_array = []
 
-        # cv = StratifiedKFold(n_splits=5)
-        cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=10)
+        cv = StratifiedKFold(n_splits=5)
+        # cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=10)
         # X_train, X_test, y_train, y_test = train_test_split(
         #     X, y, test_size=test_size, random_state=random_state, shuffle=True)
 
@@ -109,8 +110,8 @@ for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
             # test_size = 0.2
             # random_state = 42
 
-            train_scaler = StandardScaler().fit(X_train)
-            test_scaler = StandardScaler().fit(X_test)
+            train_scaler = RobustScaler().fit(X_train)
+            test_scaler = RobustScaler().fit(X_test)
 
             X_train = train_scaler.transform(X_train)
             X_test = test_scaler.transform(X_test)
@@ -133,7 +134,7 @@ for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
 
             if model_type == 'xgboost':
                 model = xgb.XGBClassifier(**model_params)
-                model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
+                model.fit(cupy.array(X_train_), y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
             if model_type == 'catboost':
                 model = CatBoostClassifier(**model_params)
@@ -150,12 +151,12 @@ for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
             # saved_model_filename = f"geuvadis_{sex}.json"
             # model.save_model(fname=ml_models_fdir / 'xgboost' / saved_model_filename)
 
-            roc_array.append(roc_auc_score(y_test, model.predict(X_test)))
+            roc_array.append(roc_auc_score(y_test, model.predict(cupy.array(X_test))))
 
-            accuracy_array.append(accuracy_score(y_test, model.predict(X_test)))
-            f1_array.append(f1_score(y_test, model.predict(X_test)))
-            precision_array.append(precision_score(y_test, model.predict(X_test)))
-            recall_array.append(recall_score(y_test, model.predict(X_test)))
+            accuracy_array.append(accuracy_score(y_test, model.predict(cupy.array(X_test))))
+            f1_array.append(f1_score(y_test, model.predict(cupy.array(X_test))))
+            precision_array.append(precision_score(y_test, model.predict(cupy.array(X_test))))
+            recall_array.append(recall_score(y_test, model.predict(cupy.array(X_test))))
 
         roc_array_total[i] = roc_array
 

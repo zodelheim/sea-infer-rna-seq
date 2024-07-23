@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.metrics import make_scorer, accuracy_score, f1_score, roc_auc_score, precision_score, recall_score, classification_report
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier
 import xgboost as xgb
@@ -26,7 +26,7 @@ use_CV = True
 model_type = 'catboost'
 model_type = 'xgboost'
 
-organ = ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1", 'None'][3]
+organ = ['BRAIN0', "HEART", "BRAIN1", 'None'][0]
 
 #! SHOLD BE THE SAME AS IN train_model.py
 # feature_importance_method = 'native'
@@ -63,23 +63,23 @@ for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
     data_eval_header = pd.read_csv(fdir_external / organ / 'reg' / 'SraRunTable.txt', sep=',')
     # data_eval_header = data_eval_header.loc(data_eval.index)
     # print(data_eval_header.columns)
-    print('ground true: ', (data_eval_header['gender'].values == 'male').astype(int))
+    print('ground true: ', (data_eval_header['sex'].values == 'male').astype(int))
 
-    features_fname = f"geuvadis_features_{sex}_calibration_{organ}.csv"
+    features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
     features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
 
     data_eval = data_eval[features_list.index]
 
     X = data_eval.values
-    y = data_eval_header['gender'].values
+    y = data_eval_header['sex'].values
 
     label_encoder = LabelEncoder().fit(y)
     print(label_encoder.classes_, "[0, 1]")
 
     y = label_encoder.transform(y)
 
-    train_scaler = StandardScaler().fit(X)
-    X = StandardScaler().fit_transform(X)
+    # X = StandardScaler().fit_transform(X)
+    X = RobustScaler().fit_transform(X)
 
     proba = np.zeros(shape=(X.shape[0], 2))
     pred = np.zeros(shape=(X.shape[0]))

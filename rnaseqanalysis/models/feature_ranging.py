@@ -16,6 +16,7 @@ from sklearn.feature_selection import RFECV
 import mlflow
 import shap
 import json
+import cupy
 
 from tqdm import tqdm
 
@@ -41,7 +42,7 @@ n_threads = 6
 value_to_predict = 'Sex'
 # value_to_predict = 'Experimental_Factor:_population (exp)'
 
-for organ in ['BRAIN0', "HEART", "BRAIN1", 'None'][:3]:
+for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
     # for sex_chromosome in ['autosome']:
     for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
 
@@ -94,8 +95,8 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None'][:3]:
             X_test = X[val]
             y_test = y[val]
 
-            train_scaler = StandardScaler().fit(X_train)
-            test_scaler = StandardScaler().fit(X_test)
+            train_scaler = RobustScaler().fit(X_train)
+            test_scaler = RobustScaler().fit(X_test)
 
             X_train = train_scaler.transform(X_train)
             X_test = test_scaler.transform(X_test)
@@ -111,7 +112,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None'][:3]:
                     # model_params['num_class'] = y.max() + 1
 
                 model = xgb.XGBClassifier(**model_params)
-                model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
+                model.fit(cupy.array(X_train_), y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
             if model_type == 'catboost':
                 model = CatBoostClassifier(**model_params)
@@ -122,8 +123,8 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None'][:3]:
                           plot=False,
                           early_stopping_rounds=20)
 
-            pred = model.predict(X_test)
-            pred_prob = model.predict_proba(X_test)
+            pred = model.predict(cupy.array(X_test))
+            pred_prob = model.predict_proba(cupy.array(X_test))
 
             importances_native = model.feature_importances_
 
