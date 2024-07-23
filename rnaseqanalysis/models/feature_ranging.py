@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.metrics import make_scorer, accuracy_score, f1_score, roc_auc_score, precision_score, recall_score, classification_report
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
 import argparse
 from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier
@@ -22,6 +22,8 @@ from tqdm import tqdm
 fdir_raw = Path("data/raw/")
 fdir_processed = Path("data/interim")
 fdir_traintest = Path("data/processed") / 'sex'
+fdir_external = Path("data/external")
+
 
 use_CV = True
 
@@ -39,170 +41,176 @@ n_threads = 6
 value_to_predict = 'Sex'
 # value_to_predict = 'Experimental_Factor:_population (exp)'
 
-for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
-    # for sex_chromosome in ['chrXY']:
+for organ in ['BRAIN0', "HEART", "BRAIN1", 'None'][:3]:
+    # for sex_chromosome in ['autosome']:
+    for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
 
-    with open(f'models/{model_type}.json', 'r') as file:
-        model_params = json.load(file)
+        with open(f'models/{model_type}.json', 'r') as file:
+            model_params = json.load(file)
 
-    # print(model_params)
-    data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex_chromosome)
+        # print(model_params)
+        data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex_chromosome)
+        data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header")
 
-    data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header")
+        if organ != "None":
+            fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
+            fname = fname.name
 
-    # --------------------------------------------------------------------------------
-    X = data.values
-    y = data_header[value_to_predict]
+            data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
+            data = data[data.columns.intersection(data_eval.columns)]
+        # --------------------------------------------------------------------------------
+        X = data.values
+        y = data_header[value_to_predict]
 
-    label_encoder = LabelEncoder().fit(y)
-    y = label_encoder.transform(y)
+        label_encoder = LabelEncoder().fit(y)
+        y = label_encoder.transform(y)
 
-    class_names = label_encoder.classes_
+        class_names = label_encoder.classes_
 
-    feature_importance_df = pd.DataFrame(
-        np.zeros(shape=(len(data.columns), 3), dtype=int),
-        columns=['Feature', 'native', 'SHAP']
-    )
-    feature_importance_df['Feature'] = data.columns
-    feature_importance_df.set_index("Feature", inplace=True)
+        feature_importance_df = pd.DataFrame(
+            np.zeros(shape=(len(data.columns), 3), dtype=int),
+            columns=['Feature', 'native', 'SHAP']
+        )
+        feature_importance_df['Feature'] = data.columns
+        feature_importance_df.set_index("Feature", inplace=True)
 
-    n_features_is_subset = 100
-    n_features_to_print = 30
+        n_features_is_subset = 100
+        n_features_to_print = 30
 
-    # cv = StratifiedKFold(n_splits=5)
-    cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=10)
+        # cv = StratifiedKFold(n_splits=5)
+        cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=10)
 
-    mean_fpr = np.linspace(0, 1, 100)
-    tprs = []
-    accuracies = []
-    f1 = []
-    precisions = []
-    recalls = []
+        mean_fpr = np.linspace(0, 1, 100)
+        tprs = []
+        accuracies = []
+        f1 = []
+        precisions = []
+        recalls = []
 
-    fig, ax = plt.subplots(figsize=(6, 6))
-    for train, val in tqdm(cv.split(X, y)):
-        X_train = X[train]
-        y_train = y[train]
-        X_test = X[val]
-        y_test = y[val]
+        fig, ax = plt.subplots(figsize=(6, 6))
+        for train, val in tqdm(cv.split(X, y)):
+            X_train = X[train]
+            y_train = y[train]
+            X_test = X[val]
+            y_test = y[val]
 
-        train_scaler = StandardScaler().fit(X_train)
-        test_scaler = StandardScaler().fit(X_test)
+            train_scaler = StandardScaler().fit(X_train)
+            test_scaler = StandardScaler().fit(X_test)
 
-        X_train = train_scaler.transform(X_train)
-        X_test = test_scaler.transform(X_test)
+            X_train = train_scaler.transform(X_train)
+            X_test = test_scaler.transform(X_test)
 
-        X_train_ = X_train
-        y_train_ = y_train
-        X_val = X_test
-        y_val = y_test
+            X_train_ = X_train
+            y_train_ = y_train
+            X_val = X_test
+            y_val = y_test
 
-        if model_type == 'xgboost':
-            if y.max() > 1:
-                model_params["objective"] = "multi:softmax"
-                # model_params['num_class'] = y.max() + 1
+            if model_type == 'xgboost':
+                if y.max() > 1:
+                    model_params["objective"] = "multi:softmax"
+                    # model_params['num_class'] = y.max() + 1
 
-            model = xgb.XGBClassifier(**model_params)
-            model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
+                model = xgb.XGBClassifier(**model_params)
+                model.fit(X_train_, y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
-        if model_type == 'catboost':
-            model = CatBoostClassifier(**model_params)
-            model.fit(X_train_, y_train_,
-                      eval_set=(X_val, y_val),
-                      verbose=False,
-                      use_best_model=True,
-                      plot=False,
-                      early_stopping_rounds=20)
+            if model_type == 'catboost':
+                model = CatBoostClassifier(**model_params)
+                model.fit(X_train_, y_train_,
+                          eval_set=(X_val, y_val),
+                          verbose=False,
+                          use_best_model=True,
+                          plot=False,
+                          early_stopping_rounds=20)
 
-        pred = model.predict(X_test)
-        pred_prob = model.predict_proba(X_test)
+            pred = model.predict(X_test)
+            pred_prob = model.predict_proba(X_test)
 
-        importances_native = model.feature_importances_
+            importances_native = model.feature_importances_
 
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X_train)
-        importances_shap = np.abs(shap_values).mean(axis=0)
+            explainer = shap.TreeExplainer(model)
+            shap_values = explainer.shap_values(X_train)
+            importances_shap = np.abs(shap_values).mean(axis=0)
 
-        if len(importances_shap.shape) > 1:
-            importances_dict = {
-                'Feature': data.columns,
-                'SHAP': importances_shap.sum(axis=1),
-                "native": importances_native
-            }
-            for idx, value in enumerate(class_names):
-                importances_dict[f'SHAP_{value}'] = importances_shap[:, idx]
-        else:
-            importances_dict = {
-                'Feature': data.columns,
-                'SHAP': importances_shap,
-                "native": importances_native
-            }
+            if len(importances_shap.shape) > 1:
+                importances_dict = {
+                    'Feature': data.columns,
+                    'SHAP': importances_shap.sum(axis=1),
+                    "native": importances_native
+                }
+                for idx, value in enumerate(class_names):
+                    importances_dict[f'SHAP_{value}'] = importances_shap[:, idx]
+            else:
+                importances_dict = {
+                    'Feature': data.columns,
+                    'SHAP': importances_shap,
+                    "native": importances_native
+                }
 
-        feature_importance_ = pd.DataFrame(importances_dict)
+            feature_importance_ = pd.DataFrame(importances_dict)
 
-        for fe in ['SHAP', "native"]:
+            for fe in ['SHAP', "native"]:
 
-            feature_importance_ = feature_importance_.sort_values(
-                by=fe, ascending=False)
+                feature_importance_ = feature_importance_.sort_values(
+                    by=fe, ascending=False)
 
-            features = feature_importance_["Feature"].iloc[:n_features_is_subset].values
+                features = feature_importance_["Feature"].iloc[:n_features_is_subset].values
 
-            for feature in features:
-                feature_importance_df.loc[feature, fe] += 1
+                for feature in features:
+                    feature_importance_df.loc[feature, fe] += 1
+
+            if len(class_names) == 1:
+
+                viz = RocCurveDisplay.from_predictions(
+                    y_test, pred_prob[:, 1],
+                    ax=ax,
+                )
+
+                interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
+                interp_tpr[0] = 0
+                tprs.append(interp_tpr)
+
+                accuracies.append(accuracy_score(y_test, pred))
+                f1.append(f1_score(y_test, pred))
+                precisions.append(precision_score(y_test, pred))
+                recalls.append(recall_score(y_test, pred))
 
         if len(class_names) == 1:
+            mean_tpr = np.mean(tprs, axis=0)
+            mean_tpr[-1] = 1.0
 
-            viz = RocCurveDisplay.from_predictions(
-                y_test, pred_prob[:, 1],
-                ax=ax,
-            )
+            mean_auc = auc(mean_fpr, mean_tpr)
+            mean_accuracy = np.mean(accuracies)
+            mean_f1 = np.mean(f1)
+            mean_precision = np.mean(precisions)
+            mean_recall = np.mean(recalls)
 
-            interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
-            interp_tpr[0] = 0
-            tprs.append(interp_tpr)
+            print(sex_chromosome)
+            print("-" * 20)
+            print(f"{mean_auc=}")
+            print(f"{mean_accuracy=}")
+            print(f"{mean_f1=}")
+            print(f"{mean_precision=}")
+            print(f"{mean_recall=}")
+            print("-" * 20)
 
-            accuracies.append(accuracy_score(y_test, pred))
-            f1.append(f1_score(y_test, pred))
-            precisions.append(precision_score(y_test, pred))
-            recalls.append(recall_score(y_test, pred))
+        feature_importance_df = feature_importance_df.sort_values(by='SHAP',
+                                                                  ascending=False)
+        print('features by SHAP')
+        print(feature_importance_df.iloc[:n_features_to_print])
 
-    if len(class_names) == 1:
-        mean_tpr = np.mean(tprs, axis=0)
-        mean_tpr[-1] = 1.0
+        feature_importance_df = feature_importance_df.sort_values(by='native',
+                                                                  ascending=False)
+        print('features by model.feature_importances_')
+        print(feature_importance_df.iloc[:n_features_to_print])
 
-        mean_auc = auc(mean_fpr, mean_tpr)
-        mean_accuracy = np.mean(accuracies)
-        mean_f1 = np.mean(f1)
-        mean_precision = np.mean(precisions)
-        mean_recall = np.mean(recalls)
+        # feature_importance_df.to_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv')
+        feature_importance_df.to_hdf(
+            fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
+            key=f'{sex_chromosome}',
+            format='f'
+        )
 
-        print(sex_chromosome)
-        print("-" * 20)
-        print(f"{mean_auc=}")
-        print(f"{mean_accuracy=}")
-        print(f"{mean_f1=}")
-        print(f"{mean_precision=}")
-        print(f"{mean_recall=}")
-        print("-" * 20)
-
-    feature_importance_df = feature_importance_df.sort_values(by='SHAP',
-                                                              ascending=False)
-    print('features by SHAP')
-    print(feature_importance_df.iloc[:n_features_to_print])
-
-    feature_importance_df = feature_importance_df.sort_values(by='native',
-                                                              ascending=False)
-    print('features by model.feature_importances_')
-    print(feature_importance_df.iloc[:n_features_to_print])
-
-    # feature_importance_df.to_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv')
-    feature_importance_df.to_hdf(
-        fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.h5',
-        key=f'{sex_chromosome}',
-        format='f'
-    )
-
-    print("\n")
-    print(model_type)
-    print(model_params)
-    print("\n")
+        print("\n")
+        print(model_type)
+        print(model_params)
+        print("\n")
