@@ -173,3 +173,5 @@ cython_debug/
 models/*
 references*
 catboost_info*
+reports/figures/*
+reports/*.pdf
