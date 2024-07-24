@@ -175,3 +175,4 @@ references*
 catboost_info*
 reports/figures/*
 reports/*.pdf
+reports/*.json
