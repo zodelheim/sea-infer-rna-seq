@@ -43,14 +43,48 @@ n_features = 0
 
 value_to_predict = 'Sex'
 
+result_dict = {}
+
+n_featues_dict = {
+    'BRAIN0': {
+        'chrXY': 10,
+        'chrX': 9,
+        'chrY': 80,
+        'autosome': 91,
+    },
+    'BRAIN1': {
+        'chrXY': 7,
+        'chrX': 5,
+        'chrY': 5,
+        'autosome': 59,
+    },
+    'HEART': {
+        'chrXY': 9,
+        'chrX': 8,
+        'chrY': 93,
+        'autosome': 82,
+    },
+    'None': {
+        'chrXY': 10,
+        'chrX': 10,
+        'chrY': 3,
+        'autosome': 82,
+    }
+}
+
 for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
+    result_dict[organ] = {}
     for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
         # for sex in ['chrY']:
+        result_dict[organ][sex] = {}
 
         print("*" * 20)
+        print(organ)
         print(model_type)
         print(sex)
         print("*" * 20)
+
+        n_features = n_featues_dict[organ][sex]
 
         with open(f'models/{model_type}.json', 'r') as file:
             model_params = json.load(file)
@@ -71,6 +105,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 
             data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
             features = features.loc[features.index.intersection(data_eval.columns)]
+
             if n_features != 0:
                 features = features.sort_values(ascending=False)
                 print(features.iloc[:n_features])
@@ -81,6 +116,8 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
             features_list = features.iloc[:n_features]
         else:
             features_list = features
+
+        print(f"{len(features_list)=}")
 
         features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
         features_list.to_csv(ml_models_fdir / model_type / features_fname)
@@ -185,7 +222,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 
             saved_model_filename = f"geuvadis_fold{i}_{sex}_calibration_{organ}.json"
 
-            if model_type is not 'knn':
+            if model_type != 'knn':
                 model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
 
         mean_tpr = np.mean(tprs, axis=0)
@@ -196,6 +233,12 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         mean_f1 = np.mean(f1)
         mean_precision = np.mean(precisions)
         mean_recall = np.mean(recalls)
+
+        result_dict[organ][sex]['mean_auc'] = mean_auc
+        result_dict[organ][sex]['mean_accuracy'] = mean_accuracy
+        result_dict[organ][sex]['mean_f1'] = mean_f1
+        result_dict[organ][sex]['mean_precision'] = mean_precision
+        result_dict[organ][sex]['mean_recall'] = mean_recall
 
         print("-" * 20)
         print(f"{mean_auc=},")
@@ -216,3 +259,6 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         plt.savefig(f'reports/figures/geuvadis_{sex}_organ_{organ}.png', dpi=300)
         plt.close()
         # plt.show()
+
+with open(f'reports/train_result_{value_to_predict}_{model_type}.json', 'w') as file:
+    json.dump(result_dict, file)
