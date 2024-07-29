@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.metrics import make_scorer, accuracy_score, f1_score, roc_auc_score, precision_score, recall_score, classification_report
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler, RobustScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler, PowerTransformer
 from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier
 import xgboost as xgb
@@ -40,6 +40,7 @@ value_to_predict = 'Sex'
 
 result_dict = {}
 
+# for organ in ["HEART"]:
 for organ in ['BRAIN0', "HEART", "BRAIN1"]:
     result_dict[organ] = {}
     for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
@@ -126,10 +127,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
 
         proba = proba / 5
         # pred = pred / 5
-        if sex == 'autosome':
-            print('predicted:   ', (proba[:, 1] > 0.5).astype(int))
-        else:
-            print('predicted:   ', (proba[:, 1] > 0.5).astype(int))
+        print('predicted:   ', (proba[:, 1] > 0.5).astype(int))
         # print(pred.astype(int))
 
         mean_tpr = np.mean(tprs, axis=0)
