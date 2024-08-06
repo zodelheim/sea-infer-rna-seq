@@ -1,0 +1,20 @@
+{
+    "Sex": {
+        "n_jobs": 6,
+        "objective": "binary:logistic",
+        "n_estimators": 500,
+        "device": "cuda",
+        "eta": 0.05,
+        "gamma": 1e-06,
+        "max_depth": 3
+    },
+    "population": {
+        "n_jobs": 6,
+        "objective": "multi:softmax",
+        "n_estimators": 500,
+        "device": "cuda",
+        "eta": 0.05,
+        "gamma": 1e-06,
+        "max_depth": 3
+    }
+}
