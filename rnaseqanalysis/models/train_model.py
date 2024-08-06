@@ -42,6 +42,7 @@ feature_importance_method = 'SHAP'
 n_features = 0
 
 value_to_predict = 'Sex'
+value_to_predict = 'population'
 
 result_dict = {}
 
@@ -88,6 +89,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 
         with open(f'models/{model_type}.json', 'r') as file:
             model_params = json.load(file)
+        model_params = model_params[value_to_predict]
 
         data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
 
