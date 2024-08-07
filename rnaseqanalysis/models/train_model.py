@@ -42,7 +42,7 @@ feature_importance_method = 'SHAP'
 n_features = 0
 
 value_to_predict = 'Sex'
-value_to_predict = 'population'
+# value_to_predict = 'population'
 
 result_dict = {}
 
