@@ -3,7 +3,7 @@ import numpy as np
 
 from sklearn.preprocessing import LabelEncoder
 from pathlib import Path
-from scipy.stats import pointbiserialr
+from scipy.stats import pointbiserialr, pearsonr, spearmanr
 
 from tqdm import tqdm
 from gtfparse import read_gtf
@@ -29,13 +29,29 @@ def filter_zero_median(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @task(log_prints=True, description='drop correlated with sex transcripts')
-def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.8) -> pd.DataFrame:
+def filter_sex_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.8) -> pd.DataFrame:
     X_corr = X
     y_corr = y
 
     columns_to_drop = []
     for c in tqdm(X_corr.columns):
         corr, pvalue = pointbiserialr(X_corr[c], LabelEncoder().fit_transform(y_corr.values))
+        if np.abs(corr) > threshold:
+            columns_to_drop.append(c)
+
+    X = X.drop(columns=columns_to_drop)
+    print('Dataset shape: ', X.shape)
+    return X
+
+
+@task(log_prints=True, description='drop correlated')
+def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.8):
+    X_corr = X
+    y_corr = y
+    columns_to_drop = []
+
+    for c in tqdm(X_corr.columns):
+        corr, pvalue = spearmanr(X_corr[c], LabelEncoder().fit_transform(y_corr.values))
         if np.abs(corr) > threshold:
             columns_to_drop.append(c)
 
@@ -66,14 +82,14 @@ def filter_cv_threshold(df: pd.DataFrame, threshold: float):
     return df
 
 
-@task(log_prints=True, description='read all raw data')
-def read_geuvadis(fname_data: Path | str,
-                  fname_header: Path | str,
-                  fname_gtf: Path | str):
-    data_raw = pd.read_csv(fname_data, index_col=0).T
+@task(log_prints=True, description='read all raw geuvadis data')
+def read_dataset(fname_data: Path | str,
+                 fname_header: Path | str,
+                 fname_gtf: Path | str):
+    data_raw = pd.read_csv(fname_data, index_col=0, sep='\t').T
     data_raw = data_raw.astype(np.float32)
 
-    data_header = pd.read_csv(fname_header, index_col=0)
+    data_header = pd.read_csv(fname_header, index_col=0, sep=',')
 
     gtf_rawdata = read_gtf(fname_gtf)
     gtf_data = gtf_rawdata.to_pandas()
@@ -181,19 +197,45 @@ def remove_sex_transcripts(data: pd.DataFrame, gtf_data: pd.DataFrame) -> tuple[
 
 
 @flow
-def make_train_dataset():
-
+def make_train_dataset(organ="None"):
     fdir_raw = Path("data/raw/")
     fdir_processed = Path("data/interim")
     fdir_traintest = Path("data/processed")
+    fdir_external = Path("data/external")
 
-    data_raw, data_header, gtf_data = read_geuvadis(
-        fdir_raw / 'Geuvadis.all.csv',
-        fdir_raw / 'Geuvadis.SraRunTable.txt',
-        fdir_raw / 'all_transcripts_strigtie_merged.gtf'
-    )
+    # value_to_predict = 'Sex'
+    # value_to_predict = value_to_predict.lower()
+
+    value_to_predict = 'Age'
+
+    dataset_name = organ
+    if organ == "None":
+        dataset_name = 'geuvadis'
+
+    if organ == "None":
+        data_raw, data_header, gtf_data = read_dataset(
+            fdir_raw / 'Geuvadis.all.csv',
+            fdir_raw / 'Geuvadis.SraRunTable.txt',
+            fdir_raw / 'all_transcripts_strigtie_merged.gtf'
+        )
+
+    if organ == "HEART":
+        # fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
+        fname = next((fdir_external / organ / 'reg').glob("*TPM.txt"))
+        fname = fname.name
+
+        data_raw, data_header, gtf_data = read_dataset(
+            fdir_external / organ / 'reg' / fname,
+            fdir_external / organ / 'reg' / 'SraRunTable.txt',
+            fdir_raw / 'all_transcripts_strigtie_merged.gtf'
+        )
     data = filter_zero_median(data_raw)
-    data = filter_correlated(data, data_header['Sex'].loc[data.index])
+
+    if organ == "None":
+        data = filter_sex_correlated(data, data_header[value_to_predict].loc[data.index])
+    else:
+        data = filter_correlated(data, data_header[value_to_predict].loc[data.index])
+
     data = logarithmization(data)
     data = filter_cv_threshold(data, 0.7)
 
@@ -206,18 +248,19 @@ def make_train_dataset():
     gtf_data = gtf_data.loc[data.columns]
     data_header = data_header.loc[data.index]
 
-    # print(gtf_data)
+    data.to_hdf(fdir_processed / f'{dataset_name}.preprocessed.h5', key="data", format='f')
+    data_header.to_hdf(fdir_processed / f'{dataset_name}.preprocessed.h5', key="header", format='f')
+    gtf_data.to_hdf(fdir_processed / f'{dataset_name}.preprocessed.h5', key="gtf", format='table')
 
-    data.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="geuvadis", format='f')
-    data_header.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header", format='f')
-    gtf_data.to_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="gtf", format='table')
-
-    data_Y.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrY', format='f')
-    data_X.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrX', format='f')
-    data_autosomes.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='autosome', format='f')
-    data_XY.to_hdf(fdir_traintest / 'sex' / 'geuvadis.preprocessed.sex.h5', key='chrXY', format='f')
+    data_Y.to_hdf(fdir_traintest / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrY', format='f')
+    data_X.to_hdf(fdir_traintest / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrX', format='f')
+    data_autosomes.to_hdf(fdir_traintest / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='autosome', format='f')
+    data_XY.to_hdf(fdir_traintest / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrXY', format='f')
 
 
 if __name__ == "__main__":
 
-    make_train_dataset()
+    organ = 'None'
+    organ = 'HEART'
+
+    make_train_dataset(organ=organ)
