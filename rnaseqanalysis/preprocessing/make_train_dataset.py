@@ -219,9 +219,11 @@ def make_train_dataset(organ="None"):
             fdir_raw / 'all_transcripts_strigtie_merged.gtf'
         )
 
-    if organ == "HEART":
-        # fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
-        fname = next((fdir_external / organ / 'reg').glob("*TPM.txt"))
+    if organ in ["HEART", "BRAIN0", "BRAIN1"]:
+        if organ == "BRAIN1":
+            fname = next((fdir_external / organ / 'reg').glob("*.csv"))
+        else:
+            fname = next((fdir_external / organ / 'reg').glob("*TPM.txt"))
         fname = fname.name
 
         data_raw, data_header, gtf_data = read_dataset(
@@ -260,7 +262,9 @@ def make_train_dataset(organ="None"):
 
 if __name__ == "__main__":
 
-    organ = 'None'
-    organ = 'HEART'
+    # organ = 'None'
+    # organ = 'HEART'
+    # organ = 'BRAIN0'
+    organ = 'BRAIN1'
 
     make_train_dataset(organ=organ)
