@@ -38,6 +38,22 @@ model_type = 'xgboost'
 feature_importance_method = 'native'
 feature_importance_method = 'SHAP'
 
+
+sex_chromosome_names = {
+    'chrXY': 'chr_aXY',
+    'autosome': "autosomes",
+    'chrX': "chr_aX",
+    'chrY': "chr_aY"
+}
+
+organ_names = {
+    'BRAIN0': "BRAIN0",
+    "HEART": "HEART",
+    "BRAIN1": "BRAIN1",
+    'None': "BLOOD"
+}
+
+
 n_threads = 6
 
 value_to_predict = 'Sex'
@@ -181,8 +197,12 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         plt.errorbar(np.arange(1, max_n_features), f1_array_df.mean(), yerr=f1_array_df.std(), label='f1')
         plt.errorbar(np.arange(1, max_n_features), precision_array_df.mean(), yerr=precision_array_df.std(), label='precision')
         plt.errorbar(np.arange(1, max_n_features), recall_array_df.mean(), yerr=recall_array_df.std(), label='recall')
-        plt.title(sex_chromosome + ", organ: " + organ)
+        plt.title(sex_chromosome_names[sex_chromosome] + ", organ: " + organ_names[organ])
+        plt.ylim((0.4, 1.0))
+        plt.ylabel('score value')
+        plt.xlabel('# transcripts')
         plt.legend()
         plt.savefig(f'reports/figures/nfeatures/geuvadis_{sex_chromosome}_organ_{organ}.png', dpi=300)
         plt.close()
         # plt.show()
+        # exit()
