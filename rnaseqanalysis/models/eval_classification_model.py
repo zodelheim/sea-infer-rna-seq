@@ -26,6 +26,8 @@ use_CV = True
 model_type = 'catboost'
 model_type = 'xgboost'
 
+save_results = False
+
 
 #! SHOLD BE THE SAME AS IN train_model.py
 # feature_importance_method = 'native'
@@ -66,12 +68,11 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
 
         data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
         data_eval_header = pd.read_csv(fdir_external / organ / 'reg' / 'SraRunTable.txt', sep=',')
-        # data_eval_header = data_eval_header.loc(data_eval.index)
-        # print(data_eval_header.columns)
-        if organ == 'BRAIN1':
-            print('ground true: ', (data_eval_header['gender'].values == 'male').astype(int))
-        else:
-            print('ground true: ', (data_eval_header['sex'].values == 'male').astype(int))
+
+        # if organ == 'BRAIN1':
+        #     print('ground true: ', (data_eval_header['gender'].values == 'male').astype(int))
+        # else:
+        #     print('ground true: ', (data_eval_header['sex'].values == 'male').astype(int))
 
         features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
         features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
@@ -102,14 +103,14 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
         precisions = []
         recalls = []
 
+        tot_auc = 0
+
         for i in range(5):
             saved_model_filename = f"geuvadis_fold{i}_{sex}_calibration_{organ}.json"
             model.load_model(fname=ml_models_fdir / model_type / saved_model_filename)
 
             proba += model.predict_proba(X)
             pred_ = model.predict(X)
-            # if sex == 'autosome':
-            #     pred_ = np.abs(pred_ - 1)
             pred += pred_
 
             accuracies.append(accuracy_score(y, pred_))
@@ -124,11 +125,15 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
             interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
             interp_tpr[0] = 0
             tprs.append(interp_tpr)
+            plt.close()
 
+            tot_auc += roc_auc_score(y, model.predict_proba(X)[:, 1])
+
+        tot_auc = tot_auc / 5
         proba = proba / 5
         # pred = pred / 5
-        print('predicted:   ', (proba[:, 1] > 0.5).astype(int))
-        # print(pred.astype(int))
+        # print('predicted_pr:  ', (proba[:, 1] > 0.5).astype(int))
+        # print('predicted:     ', (pred > 5 / 2).astype(int))
 
         mean_tpr = np.mean(tprs, axis=0)
         mean_tpr[-1] = 1.0
@@ -146,6 +151,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
         result_dict[organ][sex]["mean_recall"] = mean_recall
 
         print("-" * 20)
+        print(f"{tot_auc=},")
         print(f"{mean_auc=},")
         print(f"{mean_accuracy=},")
         print(f"{mean_f1=},")
@@ -154,5 +160,9 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
         print("-" * 20)
         print('```')
 
-with open(f'reports/eval_result_{value_to_predict}_{model_type}.json', 'w') as file:
-    json.dump(result_dict, file)
+        _ = ConfusionMatrixDisplay.from_predictions(y, proba[:, 1] > 0.5, display_labels=['F', "M"])
+        plt.show()
+
+if save_results:
+    with open(f'reports/eval_result_{value_to_predict}_{model_type}.json', 'w') as file:
+        json.dump(result_dict, file)
