@@ -171,7 +171,7 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 models/knn/*
-models/xgboost/*
+models/xgboost/*.json
 models/catboost/*
 references*
 catboost_info*
