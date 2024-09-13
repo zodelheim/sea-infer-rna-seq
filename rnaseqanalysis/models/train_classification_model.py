@@ -73,6 +73,9 @@ n_featues_dict = {
     }
 }
 
+save_results = True
+save_features = False
+
 for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
     result_dict[organ] = {}
     for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
@@ -110,7 +113,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 
             if n_features != 0:
                 features = features.sort_values(ascending=False)
-                print(features.iloc[:n_features])
+                # print(features.iloc[:n_features])
             else:
                 print(features.shape)
 
@@ -121,8 +124,9 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 
         print(f"{len(features_list)=}")
 
-        features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
-        features_list.to_csv(ml_models_fdir / model_type / features_fname)
+        if save_features:
+            features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
+            features_list.to_csv(ml_models_fdir / model_type / features_fname)
 
         data = data[features_list.index]
 
@@ -163,6 +167,9 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         f1 = []
         precisions = []
         recalls = []
+
+        preds = np.zeros(shape=y.shape)
+        preds_proba = np.zeros(shape=y.shape)
 
         fig, ax = plt.subplots(figsize=(6, 6))
         for i, (train, val) in tqdm(enumerate(cv.split(X, y))):
@@ -208,6 +215,9 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
             pred = model.predict(cupy.array(X_test))
             pred_prob = model.predict_proba(cupy.array(X_test))
 
+            preds[val] = pred
+            preds_proba[val] = pred_prob[:, 1]
+
             viz = RocCurveDisplay.from_predictions(
                 y_test, pred_prob[:, 1],
                 ax=ax,
@@ -222,10 +232,10 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
             precisions.append(precision_score(y_test, pred))
             recalls.append(recall_score(y_test, pred))
 
-            saved_model_filename = f"geuvadis_fold{i}_{sex}_calibration_{organ}.json"
-
-            if model_type != 'knn':
-                model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
+            if save_results:
+                saved_model_filename = f"geuvadis_fold{i}_{sex}_calibration_{organ}.json"
+                if model_type != 'knn':
+                    model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
 
         mean_tpr = np.mean(tprs, axis=0)
         mean_tpr[-1] = 1.0
@@ -236,12 +246,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         mean_precision = np.mean(precisions)
         mean_recall = np.mean(recalls)
 
-        result_dict[organ][sex]['mean_auc'] = mean_auc
-        result_dict[organ][sex]['mean_accuracy'] = mean_accuracy
-        result_dict[organ][sex]['mean_f1'] = mean_f1
-        result_dict[organ][sex]['mean_precision'] = mean_precision
-        result_dict[organ][sex]['mean_recall'] = mean_recall
-
+        print("-" * 20)
         print("-" * 20)
         print(f"{mean_auc=},")
         print(f"{mean_accuracy=},")
@@ -249,6 +254,25 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         print(f"{mean_precision=},")
         print(f"{mean_recall=},")
         print("-" * 20)
+
+        total_auc = roc_auc_score(y, preds_proba)
+        total_accuracy = accuracy_score(y, preds)
+        total_f1 = f1_score(y, preds)
+        total_precision = precision_score(y, preds)
+        total_recall = recall_score(y, preds)
+
+        print(f"{total_auc=},")
+        print(f"{total_accuracy=},")
+        print(f"{total_f1=},")
+        print(f"{total_precision=},")
+        print(f"{total_recall=},")
+        print("-" * 20)
+
+        result_dict[organ][sex]['mean_auc'] = total_auc
+        result_dict[organ][sex]['mean_accuracy'] = total_accuracy
+        result_dict[organ][sex]['mean_f1'] = total_f1
+        result_dict[organ][sex]['mean_precision'] = total_precision
+        result_dict[organ][sex]['mean_recall'] = total_recall
 
         ax.plot(
             mean_fpr,
@@ -258,9 +282,22 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
             alpha=0.8,
         )
         plt.title(f"{model_type}, {sex}, {organ}")
-        plt.savefig(f'reports/figures/geuvadis_{sex}_organ_{organ}.png', dpi=300)
-        plt.close()
-        # plt.show()
+        if save_results:
+            plt.savefig(f'reports/figures/geuvadis_{sex}_organ_{organ}.png', dpi=300)
+            plt.close()
+        else:
+            plt.show()
 
-with open(f'reports/train_result_{value_to_predict}_{model_type}.json', 'w') as file:
-    json.dump(result_dict, file)
+        # if save_results:
+        _ = ConfusionMatrixDisplay.from_predictions(y, preds, display_labels=['F', "M"])
+        plt.title(f"{model_type}, {sex}, {organ}")
+        if save_results:
+            plt.savefig(f'reports/figures/geuvadis_cm_{sex}_organ_{organ}.png', dpi=300)
+            plt.close()
+        else:
+            plt.show()
+
+
+if save_results:
+    with open(f'reports/train_result_{value_to_predict}_{model_type}.json', 'w') as file:
+        json.dump(result_dict, file)
