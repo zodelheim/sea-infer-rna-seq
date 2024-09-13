@@ -39,8 +39,6 @@ model_type = 'xgboost'
 feature_importance_method = 'native'
 feature_importance_method = 'SHAP'
 
-n_features = 0
-
 value_to_predict = 'Sex'
 # value_to_predict = 'population'
 
@@ -73,6 +71,9 @@ n_featues_dict = {
     }
 }
 
+
+features_shapsumm_threshold = 45
+
 save_results = True
 save_features = False
 
@@ -88,6 +89,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         print(sex)
         print("*" * 20)
 
+        # n_features = 0
         n_features = n_featues_dict[organ][sex]
 
         with open(f'models/{model_type}.json', 'r') as file:
@@ -120,9 +122,8 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         if n_features != 0:
             features_list = features.iloc[:n_features]
         else:
-            features_list = features
-
-        print(f"{len(features_list)=}")
+            features_list = features.loc[features >= features_shapsumm_threshold]
+            n_features = len(features_list)
 
         if save_features:
             features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
@@ -273,6 +274,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         result_dict[organ][sex]['mean_f1'] = total_f1
         result_dict[organ][sex]['mean_precision'] = total_precision
         result_dict[organ][sex]['mean_recall'] = total_recall
+        result_dict[organ][sex]['n_features'] = n_features
 
         ax.plot(
             mean_fpr,
