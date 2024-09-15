@@ -85,8 +85,9 @@ def filter_cv_threshold(df: pd.DataFrame, threshold: float):
 @task(log_prints=True, description='read all raw geuvadis data')
 def read_dataset(fname_data: Path | str,
                  fname_header: Path | str,
-                 fname_gtf: Path | str):
-    data_raw = pd.read_csv(fname_data, index_col=0, sep='\t').T
+                 fname_gtf: Path | str,
+                 separator=','):
+    data_raw = pd.read_csv(fname_data, index_col=0, sep=separator).T
     data_raw = data_raw.astype(np.float32)
 
     data_header = pd.read_csv(fname_header, index_col=0, sep=',')
@@ -222,14 +223,17 @@ def make_train_dataset(organ="None"):
     if organ in ["HEART", "BRAIN0", "BRAIN1"]:
         if organ == "BRAIN1":
             fname = next((fdir_external / organ / 'reg').glob("*.csv"))
+            separator = ","
         else:
             fname = next((fdir_external / organ / 'reg').glob("*TPM.txt"))
+            separator = "\t"
         fname = fname.name
 
         data_raw, data_header, gtf_data = read_dataset(
             fdir_external / organ / 'reg' / fname,
             fdir_external / organ / 'reg' / 'SraRunTable.txt',
-            fdir_raw / 'all_transcripts_strigtie_merged.gtf'
+            fdir_raw / 'all_transcripts_strigtie_merged.gtf',
+            separator
         )
     data = filter_zero_median(data_raw)
 
