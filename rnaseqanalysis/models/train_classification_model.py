@@ -119,14 +119,16 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
             else:
                 print(features.shape)
 
+        features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
         if n_features != 0:
-            features_list = features.iloc[:n_features]
+            # features_list = features.iloc[:n_features]
+            features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
+
         else:
             features_list = features.loc[features >= features_shapsumm_threshold]
             n_features = len(features_list)
 
         if save_features:
-            features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
             features_list.to_csv(ml_models_fdir / model_type / features_fname)
 
         data = data[features_list.index]
