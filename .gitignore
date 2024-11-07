@@ -180,3 +180,4 @@ reports/*.pdf
 reports/*.json
 models/xgboost/*.tar.xz
 models/xgboost/*.zip
+reports/for_paper/*.pdf
