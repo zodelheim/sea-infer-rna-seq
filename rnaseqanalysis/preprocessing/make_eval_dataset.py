@@ -37,10 +37,16 @@ fdir_traintest = Path("data/processed")
 fdir_external = Path("data/external")
 
 for organ in ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1"]:
+# for organ in ['BRAIN0']:
 
     # fname = Path("heart.merged.TPM.txt")
     if "BRAIN1" in organ:
         fname = next((fdir_external / organ / 'reg').glob("*.csv"))
+        fname = fname.name
+        print(fname)
+        data = pd.read_csv(fdir_external / organ / 'reg' / fname, sep=',', index_col=0).T
+    elif "BRAIN0" in organ:
+        fname = next((fdir_external / organ / 'reg').glob("*TPM.csv"))
         fname = fname.name
         print(fname)
         data = pd.read_csv(fdir_external / organ / 'reg' / fname, sep=',', index_col=0).T
@@ -49,7 +55,6 @@ for organ in ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1"]:
         fname = fname.name
         print(fname)
         data = pd.read_csv(fdir_external / organ / 'reg' / fname, sep='\t').T
-
 
     data_header = pd.read_csv(fdir_external / organ / 'reg' / 'SraRunTable.txt', sep=',')
     # print(data_header.columns)
