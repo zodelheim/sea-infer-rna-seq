@@ -1,0 +1,1 @@
+from rnaseqanalysis import config
