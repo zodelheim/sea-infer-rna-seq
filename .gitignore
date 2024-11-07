@@ -178,4 +178,5 @@ catboost_info*
 reports/figures/*
 reports/*.pdf
 reports/*.json
-models/xgboost/geuvadis_train_features_backup_28_08_2024.tar.xz
+models/xgboost/*.tar.xz
+models/xgboost/*.zip
