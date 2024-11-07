@@ -39,17 +39,37 @@ model_type = 'xgboost'
 feature_importance_method = 'native'
 feature_importance_method = 'SHAP'
 
+sex_chromosome_names = {
+    'chrXY': 'chr_aXY',
+    'autosome': "autosomes",
+    'chrX': "chr_aX",
+    'chrY': "chr_aY"
+}
+
+organ_names = {
+    'BRAIN0': "BRAIN0",
+    "HEART": "HEART",
+    "BRAIN1": "BRAIN1",
+    'None': "BLOOD"
+}
+
 value_to_predict = 'Sex'
 # value_to_predict = 'population'
 
 result_dict = {}
 
 n_featues_dict = {
+    # 'BRAIN0': {
+    #     'chrXY': 10,
+    #     'chrX': 9,
+    #     'chrY': 80,
+    #     'autosome': 91,
+    # },
     'BRAIN0': {
-        'chrXY': 10,
-        'chrX': 9,
-        'chrY': 80,
-        'autosome': 91,
+        'chrXY': 2,
+        'chrX': 6,
+        'chrY': 5,
+        'autosome': 37,
     },
     'BRAIN1': {
         'chrXY': 7,
@@ -77,10 +97,16 @@ features_shapsumm_threshold = 45
 save_results = True
 save_features = False
 
-for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
+# for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
+for organ in ["None"]:
     result_dict[organ] = {}
-    for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
-        # for sex in ['chrY']:
+
+    fig_cm, axs_cm = plt.subplots(2, 2)
+    cbar_ax1 = fig_cm.add_axes([.84, .25, .015, .6], in_layout=True)
+    cbar_ax2 = fig_cm.add_axes([.92, .25, .015, .6], in_layout=True)
+
+    for sex, ax_cm in zip(['chrXY', 'chrX', 'chrY', 'autosome'], axs_cm.flat):
+        # for sex in ['chrXY']:
         result_dict[organ][sex] = {}
 
         print("*" * 20)
@@ -120,10 +146,12 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
                 print(features.shape)
 
         features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
-        if n_features != 0:
-            # features_list = features.iloc[:n_features]
-            features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
 
+        if n_features != 0:
+            if save_features:
+                features_list = features.iloc[:n_features]
+            else:
+                features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
         else:
             features_list = features.loc[features >= features_shapsumm_threshold]
             n_features = len(features_list)
@@ -287,19 +315,58 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         )
         plt.title(f"{model_type}, {sex}, {organ}")
         if save_results:
-            plt.savefig(f'reports/figures/geuvadis_{sex}_organ_{organ}.png', dpi=300)
+            plt.savefig(f'reports/figures/geuvadis_{sex}_organ_{organ}_ROC.png', dpi=300)
             plt.close()
         else:
             plt.show()
 
         # if save_results:
-        _ = ConfusionMatrixDisplay.from_predictions(y, preds, display_labels=['F', "M"])
-        plt.title(f"{model_type}, {sex}, {organ}")
-        if save_results:
-            plt.savefig(f'reports/figures/geuvadis_cm_{sex}_organ_{organ}.png', dpi=300)
-            plt.close()
-        else:
-            plt.show()
+        # _ = ConfusionMatrixDisplay.from_predictions(y, preds, display_labels=['F', "M"])
+        # plt.title(f"{model_type}, {sex}, {organ}")
+
+        mask_diag = np.eye(2, 2, dtype=bool)
+        cm = confusion_matrix(y, preds)
+
+        true_total_1 = np.sum(cm[0])
+        true_total_2 = np.sum(cm[1])
+        cm_ = cm.copy().astype(np.float32)
+
+        cm_[0] = cm_[0] / true_total_1.item() * 100
+        cm_[1] = cm_[1] / true_total_2.item() * 100
+
+        cm_anno = [[], []]
+
+        cm_anno[0] = [f"{cm[0, 0]} \n ({round(cm_[0, 0])}%)", f"{cm[0, 1]} \n ({round(cm_[0, 1])}%)"]
+        cm_anno[1] = [f"{cm[1, 0]} \n ({round(cm_[1, 0])}%)", f"{cm[1, 1]} \n ({round(cm_[1, 1])}%)"]
+
+        sns.heatmap(cm, annot=cm_anno, cmap='Blues', ax=ax_cm, square=True,
+                    vmin=0, vmax=len(y), fmt='',
+                    mask=~mask_diag,
+                    cbar_kws={'orientation': 'vertical', 'format': "%1i"},
+                    cbar_ax=cbar_ax1 if sex == 'chrXY' else None,
+                    cbar=sex == 'chrXY',
+                    annot_kws=dict(ha='center'),
+                    )
+        sns.heatmap(cm, annot=cm_anno, cmap='Reds', ax=ax_cm, square=True,
+                    vmin=0, vmax=len(y), fmt='',
+                    mask=mask_diag,
+                    cbar_kws={'orientation': 'vertical', 'format': "%1i"},
+                    cbar_ax=cbar_ax2 if sex == 'chrXY' else None,
+                    cbar=sex == 'chrXY',
+                    annot_kws=dict(ha='center'),
+                    )
+        ax_cm.set_xlabel('Predicted label')
+        ax_cm.set_ylabel('True label')
+        ax_cm.xaxis.set_ticklabels(['Female', 'Male'], )
+        ax_cm.yaxis.set_ticklabels(['Female', 'Male'], rotation=0)
+        ax_cm.set_title(f"{sex_chromosome_names[sex]}")
+
+    fig_cm.tight_layout(rect=(0, 0, .87, 1))
+    if save_results:
+        plt.savefig(f'reports/figures/geuvadis_cm_{organ}.png', dpi=300)
+        plt.close()
+    else:
+        plt.show()
 
 
 if save_results:
