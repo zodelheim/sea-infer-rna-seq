@@ -40,11 +40,11 @@ feature_importance_method = 'SHAP'
 n_threads = 6
 
 value_to_predict = 'Sex'
-value_to_predict = 'population'
 
 
 # value_to_predict = 'Experimental_Factor:_population (exp)'
 
+# for organ in ['BRAIN1']:
 for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
     # for sex_chromosome in ['autosome']:
     for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:

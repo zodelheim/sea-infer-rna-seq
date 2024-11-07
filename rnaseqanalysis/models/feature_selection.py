@@ -59,8 +59,8 @@ n_threads = 6
 value_to_predict = 'Sex'
 # value_to_predict = 'Experimental_Factor:_population (exp)'
 
+# for organ in ['BRAIN0']:
 for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
-
     for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
         # for sex_chromosome in ['chrY']:
 
