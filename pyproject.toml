@@ -5,9 +5,10 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "rnaseqanalysis"
 version = "0.0.1"
-description = "A short description of the project."
+description = "RNA-seq and CAGE data analysis for Paper."
 authors = [
-  { name = "zodelheim" },
+  { name = "Arsenii Dokuchaev" },
+  { name = "Tatiana Tatarinova" }
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
