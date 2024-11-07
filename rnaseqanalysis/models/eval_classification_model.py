@@ -21,13 +21,29 @@ fdir_traintest = Path("data/processed") / 'sex'
 fdir_external = Path("data/external")
 ml_models_fdir = Path("models")
 
+sex_chromosome_names = {
+    'chrXY': 'chr_aXY',
+    'autosome': "autosomes",
+    'chrX': "chr_aX",
+    'chrY': "chr_aY"
+}
+
+organ_names = {
+    'BRAIN0': "BRAIN0",
+    "HEART": "HEART",
+    "BRAIN1": "BRAIN1",
+    'None': "BLOOD"
+}
+
 use_CV = True
 
 model_type = 'catboost'
 model_type = 'xgboost'
 
-save_results = False
+save_results = True
 
+tissue_specific = False
+tissue_name = 'Nac'
 
 #! SHOLD BE THE SAME AS IN train_model.py
 # feature_importance_method = 'native'
@@ -42,10 +58,16 @@ value_to_predict = 'Sex'
 
 result_dict = {}
 
-# for organ in ["HEART"]:
-for organ in ['BRAIN0', "HEART", "BRAIN1"]:
+for organ in ["BRAIN1"]:
+    # for organ in ['BRAIN0', "HEART", "BRAIN1"]:
     result_dict[organ] = {}
-    for sex in ['chrXY', 'chrX', 'chrY', 'autosome']:
+    fig, axs = plt.subplots(2, 2)
+    # plt.subplots_adjust(bottom=0.2)
+    cbar_ax1 = fig.add_axes([.84, .25, .015, .6], in_layout=True)
+    cbar_ax2 = fig.add_axes([.92, .25, .015, .6], in_layout=True)
+
+    for sex, ax in zip(['chrXY', 'chrX', 'chrY', 'autosome'], axs.flat):
+        # for sex in ['chrXY']:
         result_dict[organ][sex] = {}
         print('```')
         print("*" * 20)
@@ -69,6 +91,12 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
         data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
         data_eval_header = pd.read_csv(fdir_external / organ / 'reg' / 'SraRunTable.txt', sep=',')
 
+        if tissue_specific:
+            data_eval_header.set_index('Run', inplace=True)
+            tissue_index = data_eval_header.loc[data_eval_header['tissue'] != tissue_name].index
+            data_eval = data_eval.loc[tissue_index]
+            data_eval_header = data_eval_header.loc[tissue_index]
+
         # if organ == 'BRAIN1':
         #     print('ground true: ', (data_eval_header['gender'].values == 'male').astype(int))
         # else:
@@ -76,7 +104,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
 
         features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
         features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
-
+        print(f"{len(features_list)=}")
         data_eval = data_eval[features_list.index]
 
         X = data_eval.values
@@ -132,7 +160,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
         tot_auc = tot_auc / 5
         proba = proba / 5
         # pred = pred / 5
-        # print('predicted_pr:  ', (proba[:, 1] > 0.5).astype(int))
+        # print('predicted_pr:  ', (proba[:, 1] > proba_thresh).astype(int))
         # print('predicted:     ', (pred > 5 / 2).astype(int))
 
         mean_tpr = np.mean(tprs, axis=0)
@@ -151,7 +179,6 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
         result_dict[organ][sex]["mean_recall"] = mean_recall
 
         print("-" * 20)
-        print(f"{tot_auc=},")
         print(f"{mean_auc=},")
         print(f"{mean_accuracy=},")
         print(f"{mean_f1=},")
@@ -160,8 +187,77 @@ for organ in ['BRAIN0', "HEART", "BRAIN1"]:
         print("-" * 20)
         print('```')
 
-        _ = ConfusionMatrixDisplay.from_predictions(y, proba[:, 1] > 0.5, display_labels=['F', "M"])
+        proba_thresh = 0.5
+
+        tot_accuracy = (accuracy_score(y, proba[:, 1] > proba_thresh))
+        tot_f1 = (f1_score(y, proba[:, 1] > proba_thresh))
+        tot_precision = (precision_score(y, proba[:, 1] > proba_thresh))
+        tot_recall = (recall_score(y, proba[:, 1] > proba_thresh))
+
+        # result_dict[organ][sex]["tot_auc"] = tot_auc
+        # result_dict[organ][sex]["tot_accuracy"] = tot_accuracy
+        # result_dict[organ][sex]["tot_f1"] = tot_f1
+        # result_dict[organ][sex]["tot_precision"] = tot_precision
+        # result_dict[organ][sex]["tot_recall"] = tot_recall
+
+        # print("-" * 20)
+        # print(f"{tot_auc=},")
+        # print(f"{tot_accuracy=},")
+        # print(f"{tot_f1=},")
+        # print(f"{tot_precision=},")
+        # print(f"{tot_recall=},")
+        # print("-" * 20)
+        # print('```')
+
+        mask_diag = np.eye(2, 2, dtype=bool)
+        cm = confusion_matrix(y, proba[:, 1] > proba_thresh)
+        true_total_1 = np.sum(cm[0])
+        true_total_2 = np.sum(cm[1])
+        cm_ = cm.copy().astype(np.float32)
+
+        cm_[0] = cm_[0] / true_total_1.item() * 100
+        cm_[1] = cm_[1] / true_total_2.item() * 100
+
+        cm_anno = [[], []]
+
+        cm_anno[0] = [f"{cm[0, 0]} \n ({round(cm_[0, 0])}%)", f"{cm[0, 1]} \n ({round(cm_[0, 1])}%)"]
+        cm_anno[1] = [f"{cm[1, 0]} \n ({round(cm_[1, 0])}%)", f"{cm[1, 1]} \n ({round(cm_[1, 1])}%)"]
+
+        # cm_anno = np.array(cm_anno)
+
+        sns.heatmap(cm, annot=cm_anno, cmap='Blues', ax=ax, square=True,
+                    vmin=0, vmax=len(y), fmt='',
+                    mask=~mask_diag,
+                    cbar_kws={'orientation': 'vertical', 'format': "%1i"},
+                    cbar_ax=cbar_ax1 if sex == 'chrXY' else None,
+                    cbar=sex == 'chrXY',
+                    annot_kws=dict(ha='center'),
+                    )
+        sns.heatmap(cm, annot=cm_anno, cmap='Reds', ax=ax, square=True,
+                    vmin=0, vmax=len(y), fmt='',
+                    mask=mask_diag,
+                    cbar_kws={'orientation': 'vertical', 'format': "%1i"},
+                    cbar_ax=cbar_ax2 if sex == 'chrXY' else None,
+                    cbar=sex == 'chrXY',
+                    annot_kws=dict(ha='center'),
+                    )
+        ax.set_xlabel('Predicted label')
+        ax.set_ylabel('True label')
+        ax.xaxis.set_ticklabels(['Female', 'Male'], )
+        ax.yaxis.set_ticklabels(['Female', 'Male'], rotation=0)
+        ax.set_title(f"{sex_chromosome_names[sex]}")
+
+        # plt.title(f"{model_type}, {sex}, {organ}")
+        # plt.tight_layout()
+
+    fig.tight_layout(rect=(0, 0, .87, 1))
+    if save_results:
+        plt.savefig(f'reports/figures/cm_{organ}.png', dpi=300)
+        plt.close()
+    else:
         plt.show()
+    # exit()
+    # plt.show()
 
 if save_results:
     with open(f'reports/eval_result_{value_to_predict}_{model_type}.json', 'w') as file:
