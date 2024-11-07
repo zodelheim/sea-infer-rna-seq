@@ -221,7 +221,7 @@ def make_train_dataset(organ="None"):
         )
 
     if organ in ["HEART", "BRAIN0", "BRAIN1"]:
-        if organ == "BRAIN1":
+        if organ in ["BRAIN1", "BRAIN0"]:
             fname = next((fdir_external / organ / 'reg').glob("*.csv"))
             separator = ","
         else:
@@ -268,7 +268,7 @@ if __name__ == "__main__":
 
     # organ = 'None'
     # organ = 'HEART'
-    # organ = 'BRAIN0'
-    organ = 'BRAIN1'
+    organ = 'BRAIN0'
+    # organ = 'BRAIN1'
 
     make_train_dataset(organ=organ)
