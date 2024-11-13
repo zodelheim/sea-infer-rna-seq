@@ -37,7 +37,7 @@ if __name__ == "__main__":
     fdir_traintest = Path("data/processed")
     fdir_external = Path("data/external")
 
-    for organ in ["BLOOD1", 'BRAIN0', "HEART", "BRAIN1"]:
+    for organ in ['BRAIN0', "HEART", "BRAIN1"]:
         # for organ in ['BRAIN0']:
 
         # fname = Path("heart.merged.TPM.txt")

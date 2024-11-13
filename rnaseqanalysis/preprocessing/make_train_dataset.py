@@ -204,10 +204,10 @@ def make_train_dataset(organ="None"):
     fdir_traintest = Path("data/processed")
     fdir_external = Path("data/external")
 
-    # value_to_predict = 'Sex'
+    value_to_predict = 'Sex'
     # value_to_predict = value_to_predict.lower()
 
-    value_to_predict = 'Age'
+    # value_to_predict = 'Age'
 
     dataset_name = organ
     if organ == "None":
