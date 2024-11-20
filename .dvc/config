@@ -1,0 +1,5 @@
+[core]
+    analytics = false
+    remote = remote_storage
+['remote "remote_storage"']
+    url = /mnt/89ea702f-c213-4e9a-acb8-8c72a41b672e/Documents/DATASETS/DVC/RNASeq/
