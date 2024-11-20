@@ -94,7 +94,7 @@ if __name__ == "__main__":
         FDIR_RAW / 'Geuvadis.SraRunTable.txt',
         FDIR_RAW / 'all_transcripts_strigtie_merged.gtf'
     )
-    geuvadis.obs['sex'] = geuvadis.obs['sex']
+    geuvadis.obs['sex'] = geuvadis.obs['Sex']
     geuvadis.obs.drop(columns=['Sex'])
 
     geuvadis.write(FDIR_INTEMEDIATE / 'GEUVADIS.raw.h5ad')
