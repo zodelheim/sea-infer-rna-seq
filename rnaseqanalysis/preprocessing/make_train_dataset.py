@@ -8,6 +8,9 @@ from scipy.stats import pointbiserialr, pearsonr, spearmanr
 from tqdm import tqdm
 from gtfparse import read_gtf
 from prefect import flow, task
+import anndata as ad
+
+from config import FDIR_EXTERNAL, FDIR_RAW, FDIR_PROCESSED, FDIR_INTEMEDIATE
 
 
 @task(log_prints=True, description='drop zero median transcripts')
@@ -28,30 +31,20 @@ def filter_zero_median(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-@task(log_prints=True, description='drop correlated with sex transcripts')
-def filter_sex_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.8) -> pd.DataFrame:
+@task(log_prints=True, description='drop correlated transcripts')
+def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.8) -> pd.DataFrame:
     X_corr = X
     y_corr = y
+    y_encoded = LabelEncoder().fit_transform(y_corr.values)
+
+    if len(np.unique(y_encoded)) == 2:
+        corr_function = pointbiserialr
+    else:
+        corr_function = spearmanr
 
     columns_to_drop = []
     for c in tqdm(X_corr.columns):
-        corr, pvalue = pointbiserialr(X_corr[c], LabelEncoder().fit_transform(y_corr.values))
-        if np.abs(corr) > threshold:
-            columns_to_drop.append(c)
-
-    X = X.drop(columns=columns_to_drop)
-    print('Dataset shape: ', X.shape)
-    return X
-
-
-@task(log_prints=True, description='drop correlated')
-def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.8):
-    X_corr = X
-    y_corr = y
-    columns_to_drop = []
-
-    for c in tqdm(X_corr.columns):
-        corr, pvalue = spearmanr(X_corr[c], LabelEncoder().fit_transform(y_corr.values))
+        corr, pvalue = corr_function(X_corr[c], y_encoded)
         if np.abs(corr) > threshold:
             columns_to_drop.append(c)
 
@@ -80,28 +73,6 @@ def filter_cv_threshold(df: pd.DataFrame, threshold: float):
 
     print('Dataset shape: ', df.shape)
     return df
-
-
-@task(log_prints=True, description='read all raw geuvadis data')
-def read_dataset(fname_data: Path | str,
-                 fname_header: Path | str,
-                 fname_gtf: Path | str,
-                 separator=','):
-    data_raw = pd.read_csv(fname_data, index_col=0, sep=separator).T
-    data_raw = data_raw.astype(np.float32)
-
-    data_header = pd.read_csv(fname_header, index_col=0, sep=',')
-
-    gtf_rawdata = read_gtf(fname_gtf)
-    gtf_data = gtf_rawdata.to_pandas()
-    gtf_data = gtf_data.set_index('transcript_id')
-    gtf_data['transcript_id'] = gtf_data.index
-
-    gtf_data = gtf_data.drop_duplicates("transcript_id")
-
-    print('Dataset shape: ', data_raw.shape)
-
-    return data_raw, data_header, gtf_data
 
 
 @task(log_prints=True, description='filter transcripts with mean < median')
@@ -155,30 +126,39 @@ def locate_sex_transcripts(gtf_data: pd.DataFrame) -> tuple[pd.Series, pd.Series
 
 
 @task(log_prints=True, description='drop sex (chrX, chrY) transcripts from data')
-def remove_sex_transcripts(data: pd.DataFrame, gtf_data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def split_by_sex_transcripts(adata: ad.AnnData) -> ad.AnnData:
 
-    transcripts_x, transcripts_y = locate_sex_transcripts(gtf_data)
+    transcripts_x, transcripts_y = locate_sex_transcripts(adata.var)
 
     transcripts_x = transcripts_x.tolist()
     transcripts_y = transcripts_y.tolist()
 
-    transcripts_x = data.columns.intersection(transcripts_x)
-    transcripts_y = data.columns.intersection(transcripts_y)
+    transcripts_x = adata.var_names.intersection(transcripts_x)
+    transcripts_y = adata.var_names.intersection(transcripts_y)
 
-    gtf_transcripts = gtf_data.loc[data.columns]
-    transcripts_autosomes = gtf_transcripts.loc[(gtf_transcripts['seqname'] != "chrX") & (gtf_transcripts['seqname'] != "chrY")].index
+    transcripts_autosomes = adata.var[(adata.var['seqname'] != "chrX") & (adata.var['seqname'] != "chrY")].index
 
-    data_XY = data
-    data_X = data[transcripts_x.union(transcripts_autosomes)]
-    data_Y = data[transcripts_y.union(transcripts_autosomes)]
-    data_autosomes = data[transcripts_autosomes]
+    data_aXY = pd.Series(np.zeros(adata.n_vars, dtype=bool), index=adata.var_names)
+    data_aX = pd.Series(np.zeros(adata.n_vars, dtype=bool), index=adata.var_names)
+    data_aY = pd.Series(np.zeros(adata.n_vars, dtype=bool), index=adata.var_names)
+    data_autosomes = pd.Series(np.zeros(adata.n_vars, dtype=bool), index=adata.var_names)
 
-    print('dataXY shape: ', data_XY.shape)
-    print('dataX shape: ', data_X.shape)
-    print('dataY shape: ', data_Y.shape)
-    print('data_autosome shape: ', data_autosomes.shape)
+    data_aXY[:] = True
+    data_aX[transcripts_x.union(transcripts_autosomes)] = True
+    data_aY[transcripts_y.union(transcripts_autosomes)] = True
+    data_autosomes[transcripts_autosomes] = True
 
-    return data_XY, data_X, data_Y, data_autosomes
+    adata.varm["chr_aXY"] = data_aXY.values
+    adata.varm["chr_aX"] = data_aX.values
+    adata.varm["chr_aY"] = data_aY.values
+    adata.varm["autosomes"] = data_autosomes.values
+
+    print('dataXY shape: ', adata.varm["chr_aXY"].shape)
+    print('dataX shape: ', adata.varm["chr_aX"].shape)
+    print('dataY shape: ', adata.varm["chr_aY"].shape)
+    print('data_autosome shape: ', adata.varm["autosomes"].shape)
+
+    return adata
 
     # # ----------------------------------- Remove sex chr transcripts -------------------------------------
     # # data = pd.read_csv(fdir_processed / 'geuvadis.preprocessed.csv', index_col=0)
@@ -198,77 +178,73 @@ def remove_sex_transcripts(data: pd.DataFrame, gtf_data: pd.DataFrame) -> tuple[
 
 
 @flow
-def make_train_dataset(organ="None"):
-    fdir_raw = Path("data/raw/")
-    fdir_processed = Path("data/interim")
-    fdir_traintest = Path("data/processed")
-    fdir_external = Path("data/external")
+def make_train_dataset(organ="None", splitby=None):
 
-    value_to_predict = 'Sex'
+    value_to_predict = 'sex'
     # value_to_predict = value_to_predict.lower()
-
     # value_to_predict = 'Age'
 
     dataset_name = organ
     if organ == "None":
         dataset_name = 'geuvadis'
 
-    if organ == "None":
-        data_raw, data_header, gtf_data = read_dataset(
-            fdir_raw / 'Geuvadis.all.csv',
-            fdir_raw / 'Geuvadis.SraRunTable.txt',
-            fdir_raw / 'all_transcripts_strigtie_merged.gtf'
-        )
+    adata = ad.read_h5ad(FDIR_INTEMEDIATE / f'{dataset_name.upper()}.raw.h5ad')
 
-    if organ in ["HEART", "BRAIN0", "BRAIN1"]:
-        if organ in ["BRAIN1", "BRAIN0"]:
-            fname = next((fdir_external / organ / 'reg').glob("*.csv"))
-            separator = ","
-        else:
-            fname = next((fdir_external / organ / 'reg').glob("*TPM.txt"))
-            separator = "\t"
-        fname = fname.name
-
-        data_raw, data_header, gtf_data = read_dataset(
-            fdir_external / organ / 'reg' / fname,
-            fdir_external / organ / 'reg' / 'SraRunTable.txt',
-            fdir_raw / 'all_transcripts_strigtie_merged.gtf',
-            separator
-        )
-    data = filter_zero_median(data_raw)
-
-    if organ == "None":
-        data = filter_sex_correlated(data, data_header[value_to_predict].loc[data.index])
+    datasets = {}
+    if splitby:
+        categories = adata.obs[splitby].unique()
+        for category in categories:
+            datasets[category] = adata.to_df()[adata.obs[splitby] == category]
     else:
-        data = filter_correlated(data, data_header[value_to_predict].loc[data.index])
+        datasets['RAW'] = adata.to_df()
 
-    data = logarithmization(data)
-    data = filter_cv_threshold(data, 0.7)
+    columns_ = pd.Index([])
 
-    data = filter_median_q34(data)
-    data = filter_cv_q34(data)
+    for key, data_raw in datasets.items():
+        data_ = filter_zero_median(data_raw)
+        data_ = filter_correlated(data_, adata.obs[value_to_predict].loc[data_.index])
+        data_ = logarithmization(data_)
+
+        data_ = filter_cv_threshold(data_, 0.7)
+        data_ = filter_median_q34(data_)
+        data_ = filter_cv_q34(data_)
+
+        columns_ = columns_.union(data_.columns)
+
+    adata = adata[:, columns_]
+    print(f"shape after filtration: {adata.shape=}")
+
+    data = logarithmization(adata.to_df())
     data = data.astype(np.float32)
 
-    data_XY, data_X, data_Y, data_autosomes = remove_sex_transcripts(data, gtf_data)
+    adata = adata[data.index, data.columns]
+    adata.layers['raw'] = adata.X.copy()
+    adata.X = data.values
 
-    gtf_data = gtf_data.loc[data.columns]
-    data_header = data_header.loc[data.index]
+    adata = split_by_sex_transcripts(adata)
 
-    data.to_hdf(fdir_processed / f'{dataset_name}.preprocessed.h5', key="data", format='f')
-    data_header.to_hdf(fdir_processed / f'{dataset_name}.preprocessed.h5', key="header", format='f')
-    gtf_data.to_hdf(fdir_processed / f'{dataset_name}.preprocessed.h5', key="gtf", format='table')
+    # gtf_data = gtf_data.loc[data.columns]
+    # data_header = data_header.loc[data.index]
 
-    data_Y.to_hdf(fdir_traintest / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrY', format='f')
-    data_X.to_hdf(fdir_traintest / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrX', format='f')
-    data_autosomes.to_hdf(fdir_traintest / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='autosome', format='f')
-    data_XY.to_hdf(fdir_traintest / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrXY', format='f')
+    # data.to_hdf(fdir_intermediate / f'{dataset_name}.preprocessed.h5', key="data", format='f')
+    # data_header.to_hdf(fdir_intermediate / f'{dataset_name}.preprocessed.h5', key="header", format='f')
+    # gtf_data.to_hdf(fdir_intermediate / f'{dataset_name}.preprocessed.h5', key="gtf", format='table')
+
+    # data_Y.to_hdf(fdir_processed / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrY', format='f')
+    # data_X.to_hdf(fdir_processed / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrX', format='f')
+    # data_autosomes.to_hdf(fdir_processed / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='autosome', format='f')
+    # data_XY.to_hdf(fdir_processed / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrXY', format='f')
+
+    adata.write(
+        FDIR_PROCESSED / value_to_predict / f"{dataset_name.upper()}.preprocessed.{value_to_predict}.h5ad"
+    )
 
 
 if __name__ == "__main__":
 
-    # organ = 'None'
+    organ = 'None'
     # organ = 'HEART'
-    organ = 'BRAIN0'
+    # organ = 'BRAIN0'
     # organ = 'BRAIN1'
 
-    make_train_dataset(organ=organ)
+    make_train_dataset(organ=organ, splitby='sex')
