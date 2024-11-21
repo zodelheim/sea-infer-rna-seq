@@ -38,6 +38,29 @@ def read_dataset(fname_data: Path | str,
     return adata
 
 
+def read_cage_dataset(fname_data: Path | str,
+                      fname_header: Path | str,
+                      fname_gtf: Path | str):
+    data_raw = pd.read_csv((fname_data), sep='\t').T
+    samples_annot = pd.read_excel(fname_header,
+                                  parse_dates=False,)
+    samples_annot.set_index('samples', inplace=True)
+    samples_annot['donor'] = samples_annot['donor'].astype(str)
+
+    genes_annot = pd.read_csv(fname_gtf)
+
+    samples_names = data_raw.index.intersection(samples_annot.index)
+    data_raw = data_raw.loc[samples_names]
+    samples_annot = samples_annot.loc[samples_names]
+
+    data_raw.columns = genes_annot['transcriptId']
+    genes_annot.set_index('transcriptId', inplace=True)
+
+    adata = ad.AnnData(X=data_raw, obs=samples_annot, var=genes_annot)
+
+    return adata
+
+
 def convert_geuvadis(fname_data: Path | str,
                      fname_header: Path | str,
                      fname_gtf: Path | str):
@@ -89,6 +112,13 @@ def convert_brain1(fname_data: Path | str,
 
 if __name__ == "__main__":
 
+    cage_heart = read_cage_dataset(
+        FDIR_EXTERNAL / "HEART" / 'CAGE' / "TPM batch corrected PLS ELS.txt",
+        FDIR_EXTERNAL / "HEART" / 'CAGE' / 'Metadata_ERytkin Edits10072024 age request.xlsx',
+        FDIR_EXTERNAL / "HEART" / 'CAGE' / 'ANNOT.csv'
+    )
+    cage_heart.write(FDIR_INTEMEDIATE / 'CAGE.HEART.raw.h5ad')
+
     geuvadis = read_dataset(
         FDIR_RAW / 'Geuvadis.all.csv',
         FDIR_RAW / 'Geuvadis.SraRunTable.txt',
@@ -96,7 +126,6 @@ if __name__ == "__main__":
     )
     geuvadis.obs['sex'] = geuvadis.obs['Sex']
     geuvadis.obs.drop(columns=['Sex'], inplace=True)
-
     geuvadis.write(FDIR_INTEMEDIATE / 'GEUVADIS.raw.h5ad')
 
     fname = next((FDIR_EXTERNAL / "HEART" / 'reg').glob("*TPM.txt"))
