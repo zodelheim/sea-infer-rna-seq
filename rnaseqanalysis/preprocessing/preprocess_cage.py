@@ -19,9 +19,9 @@ from make_train_dataset import (logarithmization,
 from config import FDIR_EXTERNAL, FDIR_INTEMEDIATE, FDIR_PROCESSED
 
 
-def parse_promoter_enchancer(data: pd.DataFrame, genes_annot: pd.DataFrame) -> pd.DataFrame:
+def parse_promoter_enchancer(adata: ad.AnnData) -> ad.AnnData:
 
-    transcript_class = genes_annot['class']
+    transcript_class = adata.var['class']
 
     new_column_names = []
     for i in range(len(data.columns)):
@@ -48,10 +48,27 @@ def drop_duplicates(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
+def label_unique(data: ad.AnnData) -> ad.AnnData:
+
+    columns_wclass = adata.var['transcript_id'].astype(str) + "_" + adata.var['class'].astype(str)
+    duplicated = columns_wclass[columns_wclass.duplicated()]
+    truely_unique = (~columns_wclass.duplicated()).values
+
+    adata_mean = adata.X.mean(axis=0)
+    for dd in tqdm(duplicated):
+        dupl_ids = np.argwhere(columns_wclass == dd)
+        largest_mean_id = np.argmax(adata_mean[dupl_ids.ravel()])
+        truely_unique[dupl_ids[largest_mean_id].item()] = True
+
+    adata.varm["unique"] = truely_unique
+
+    return adata
+
+
 for organ in ["HEART"]:
     fdir = FDIR_EXTERNAL / organ / 'CAGE'
 
-adata = ad.read(FDIR_INTEMEDIATE / f"CAGE.{organ}.raw.h5ad")
+adata = ad.read_h5ad(FDIR_INTEMEDIATE / f"CAGE.{organ}.raw.h5ad")
 
 #! if no filtering
 adata.layers['raw'] = adata.X.copy()
@@ -61,12 +78,14 @@ adata.X = logarithmization(adata.to_df()).values
 adata.var['seqname'] = adata.var['seqnames']
 adata.var['transcript_id'] = adata.var.index
 
-columns_new = [(col, str(i).zfill(5)) for i, col in enumerate(adata.var_names)]
+adata = label_unique(adata)
 
+columns_new = [(col, str(i).zfill(5)) for i, col in enumerate(adata.var_names)]
 adata.var_names = [str(i).zfill(5) for i, col in enumerate(adata.var_names)]
 # genes_annot.index = [str(i).zfill(5) for i, col in enumerate(adata.var_names)]
 
 adata = split_by_sex_transcripts(adata)
+
 
 #! if filtering
 '''
