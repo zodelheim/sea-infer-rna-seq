@@ -76,7 +76,7 @@ for organ in ['None']:
         model_params = model_params[value_to_predict]
 
         # print(model_params)
-        adata = ad.read(fdir_processed / f"GEUVADIS.preprocessed.{value_to_predict}.h5ad")
+        adata = ad.read(fdir_processed / f"{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad")
         adata = adata[:, adata.varm[sex_chromosome]]
 
         feature_importance_df = pd.read_hdf(fdir_intermediate / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
