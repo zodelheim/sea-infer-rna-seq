@@ -49,9 +49,12 @@ def read_cage_dataset(fname_data: Path | str,
 
     genes_annot = pd.read_csv(fname_gtf)
 
-    samples_names = data_raw.index.intersection(samples_annot.index)
-    data_raw = data_raw.loc[samples_names]
-    samples_annot = samples_annot.loc[samples_names]
+    columns = data_raw.columns.intersection(genes_annot.index)
+    indices = data_raw.index.intersection(samples_annot.index)
+
+    data_raw = data_raw.loc[indices, columns]
+    samples_annot = samples_annot.loc[indices]
+    genes_annot = genes_annot.loc[columns]
 
     data_raw.columns = genes_annot['transcriptId']
     genes_annot.set_index('transcriptId', inplace=True)
@@ -118,7 +121,7 @@ if __name__ == "__main__":
         FDIR_EXTERNAL / "HEART" / 'CAGE' / 'ANNOT.csv'
     )
     cage_heart.write(FDIR_INTEMEDIATE / 'CAGE.HEART.raw.h5ad')
-
+    exit()
     geuvadis = read_dataset(
         FDIR_RAW / 'Geuvadis.all.csv',
         FDIR_RAW / 'Geuvadis.SraRunTable.txt',
