@@ -95,7 +95,7 @@ if __name__ == "__main__":
         FDIR_RAW / 'all_transcripts_strigtie_merged.gtf'
     )
     geuvadis.obs['sex'] = geuvadis.obs['Sex']
-    geuvadis.obs.drop(columns=['Sex'])
+    geuvadis.obs.drop(columns=['Sex'], inplace=True)
 
     geuvadis.write(FDIR_INTEMEDIATE / 'GEUVADIS.raw.h5ad')
 
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         separator=","
     )
     brain_1.obs['sex'] = brain_1.obs['gender']
-    brain_1.obs.drop(columns=['gender'])
+    brain_1.obs.drop(columns=['gender'], inplace=True)
     brain_1.write(FDIR_INTEMEDIATE / 'BRAIN1.raw.h5ad')
 
     # brain_0 = 0
