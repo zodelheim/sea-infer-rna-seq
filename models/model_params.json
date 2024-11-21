@@ -1,6 +1,6 @@
 {
     "random_forest": {
-        "Sex": {},
+        "sex": {},
         "population": {}
     },
     "knn": {
@@ -16,7 +16,7 @@
         "learning_rate": 0.03
     },
     "xgboost": {
-        "Sex": {
+        "sex": {
             "n_jobs": 6,
             "objective": "binary:logistic",
             "n_estimators": 500,
