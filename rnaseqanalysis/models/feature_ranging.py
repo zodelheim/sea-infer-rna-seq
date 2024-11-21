@@ -17,19 +17,24 @@ import mlflow
 import shap
 import json
 import cupy
+import anndata as ad
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from config import FDIR_EXTERNAL, FDIR_RAW, FDIR_PROCESSED, FDIR_INTEMEDIATE
+
 
 from tqdm import tqdm
 
-fdir_raw = Path("data/raw/")
-fdir_processed = Path("data/interim")
-fdir_traintest = Path("data/processed") / 'sex'
-fdir_external = Path("data/external")
+fdir_raw = FDIR_RAW
+fdir_intermediate = FDIR_INTEMEDIATE
+fdir_processed = FDIR_PROCESSED / 'sex'
+fdir_external = FDIR_EXTERNAL
 
 
 use_CV = True
 
 model_type = 'catboost'
 model_type = 'xgboost'
+# model_type = 'random_forest'
 
 # sex = 'chrXY'
 # sex = 'autosome'
@@ -39,32 +44,39 @@ feature_importance_method = 'SHAP'
 
 n_threads = 6
 
-value_to_predict = 'Sex'
+value_to_predict = 'sex'
+
+filename_prefixes = {
+    "None": "geuvadis",
+    'CAGE.heart': "CAGE.heart"
+}
 
 
 # value_to_predict = 'Experimental_Factor:_population (exp)'
 
 # for organ in ['BRAIN1']:
-for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
-    # for sex_chromosome in ['autosome']:
-    for sex_chromosome in ['chrXY', 'autosome', 'chrX', 'chrY']:
+# for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
+# for organ in ['CAGE.heart']:
+for organ in ['None']:
+    # for sex_chromosome in ['chrXY']:
+    for sex_chromosome in ['chr_aXY', 'autosomes', 'chr_aX', 'chr_aY']:
 
-        with open(f'models/{model_type}.json', 'r') as file:
-            model_params = json.load(file)
+        with open(f'models/model_params.json', 'r') as file:
+            model_params = json.load(file)[model_type]
         model_params = model_params[value_to_predict]
 
-        data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex_chromosome)
-        data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key="header")
+        adata = ad.read(fdir_processed / f"GEUVADIS.preprocessed.{value_to_predict}.h5ad")
+        adata = adata[:, adata.varm[sex_chromosome]]
 
-        if organ != "None":
+        if organ not in ["None", "CAGE.heart"]:
             fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
             fname = fname.name
 
             data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
-            data = data[data.columns.intersection(data_eval.columns)]
+            adata = adata[:, adata.var_names.intersection(data_eval.columns)]
         # --------------------------------------------------------------------------------
-        X = data.values
-        y = data_header[value_to_predict]
+        X = adata.X
+        y = adata.obs[value_to_predict]
 
         label_encoder = LabelEncoder().fit(y)
         y = label_encoder.transform(y)
@@ -72,10 +84,10 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
         class_names = label_encoder.classes_
 
         feature_importance_df = pd.DataFrame(
-            np.zeros(shape=(len(data.columns), 3), dtype=int),
+            np.zeros(shape=(adata.n_vars, 3), dtype=int),
             columns=['Feature', 'native', 'SHAP']
         )
-        feature_importance_df['Feature'] = data.columns
+        feature_importance_df['Feature'] = adata.var_names
         feature_importance_df.set_index("Feature", inplace=True)
 
         n_features_is_subset = 100
@@ -117,6 +129,8 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
                 model = xgb.XGBClassifier(**model_params)
                 model.fit(cupy.array(X_train_), y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
+                X_test_c = cupy.array(X_test)
+
             if model_type == 'catboost':
                 model = CatBoostClassifier(**model_params)
                 model.fit(X_train_, y_train_,
@@ -126,8 +140,14 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
                           plot=False,
                           early_stopping_rounds=20)
 
-            pred = model.predict(cupy.array(X_test))
-            pred_prob = model.predict_proba(cupy.array(X_test))
+            if model_type == 'random_forest':
+                model = RandomForestClassifier()
+                model.fit(X_train, y_train)
+
+                X_test_c = X_test
+
+            pred = model.predict(X_test_c)
+            pred_prob = model.predict_proba(X_test_c)
 
             importances_native = model.feature_importances_
 
@@ -137,7 +157,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 
             if len(importances_shap.shape) > 1:
                 importances_dict = {
-                    'Feature': data.columns,
+                    'Feature': adata.var_names,
                     'SHAP': importances_shap.sum(axis=1),
                     "native": importances_native
                 }
@@ -145,7 +165,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
                     importances_dict[f'SHAP_{value}'] = importances_shap[:, idx]
             else:
                 importances_dict = {
-                    'Feature': data.columns,
+                    'Feature': adata.var_names,
                     'SHAP': importances_shap,
                     "native": importances_native
                 }
@@ -209,7 +229,7 @@ for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 
         # feature_importance_df.to_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv')
         feature_importance_df.to_hdf(
-            fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
+            fdir_intermediate / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
             key=f'{sex_chromosome}',
             format='f'
         )
