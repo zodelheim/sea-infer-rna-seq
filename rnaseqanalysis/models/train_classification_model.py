@@ -15,45 +15,41 @@ from sklearn.decomposition import PCA
 import umap
 import json
 import cupy
+from tqdm import tqdm
+import anndata as ad
 
 from sklearn.neighbors import KNeighborsClassifier
+from config import FDIR_EXTERNAL, FDIR_INTEMEDIATE, FDIR_PROCESSED, FDIR_RAW
 
-
-from tqdm import tqdm
 
 # mlflow.set_tracking_uri(uri="http://localhost:8080")
 
 
-fdir_raw = Path("data/raw/")
-fdir_processed = Path("data/interim")
-fdir_traintest = Path("data/processed") / 'sex'
-fdir_external = Path("data/external")
+fdir_raw = FDIR_RAW
+fdir_intermediate = FDIR_INTEMEDIATE
+fdir_processed = FDIR_PROCESSED / 'sex'
+fdir_external = FDIR_EXTERNAL
 ml_models_fdir = Path("models")
 
 use_CV = True
 
 model_type = 'catboost'
 model_type = 'xgboost'
+# model_type = 'random_forest'
 # model_type = 'knn'
 
 feature_importance_method = 'native'
 feature_importance_method = 'SHAP'
 
-sex_chromosome_names = {
-    'chrXY': 'chr_aXY',
-    'autosome': "autosomes",
-    'chrX': "chr_aX",
-    'chrY': "chr_aY"
-}
-
 organ_names = {
     'BRAIN0': "BRAIN0",
     "HEART": "HEART",
     "BRAIN1": "BRAIN1",
-    'None': "BLOOD"
+    'None': "BLOOD",
+    'CAGE.heart': 'CAGE.heart'
 }
 
-value_to_predict = 'Sex'
+value_to_predict = 'sex'
 # value_to_predict = 'population'
 
 result_dict = {}
@@ -66,38 +62,50 @@ n_featues_dict = {
     #     'autosome': 91,
     # },
     'BRAIN0': {
-        'chrXY': 2,
-        'chrX': 6,
-        'chrY': 5,
-        'autosome': 37,
+        'chr_aXY': 2,
+        'chr_aX': 6,
+        'chr_aY': 5,
+        'autosomes': 37,
     },
     'BRAIN1': {
-        'chrXY': 7,
-        'chrX': 5,
-        'chrY': 5,
-        'autosome': 59,
+        'chr_aXY': 7,
+        'chr_aX': 5,
+        'chr_aY': 5,
+        'autosomes': 59,
     },
     'HEART': {
-        'chrXY': 9,
-        'chrX': 8,
-        'chrY': 93,
-        'autosome': 82,
+        'chr_aXY': 9,
+        'chr_aX': 8,
+        'chr_aY': 93,
+        'autosomes': 82,
     },
     'None': {
-        'chrXY': 10,
-        'chrX': 10,
-        'chrY': 3,
-        'autosome': 82,
+        'chr_aXY': 10,
+        'chr_aX': 10,
+        'chr_aY': 3,
+        'autosomes': 82,
+    },
+    'CAGE.heart': {
+        'chr_aXY': 100,
+        'chr_aX': 100,
+        'chr_aY': 100,
+        'autosomes': 100,
     }
+}
+
+filename_prefixes = {
+    "None": "geuvadis",
+    'CAGE.heart': "CAGE.heart"
 }
 
 
 features_shapsumm_threshold = 45
 
-save_results = True
+save_results = False
 save_features = False
 
 # for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
+# for organ in ["CAGE.heart"]:
 for organ in ["None"]:
     result_dict[organ] = {}
 
@@ -105,34 +113,36 @@ for organ in ["None"]:
     cbar_ax1 = fig_cm.add_axes([.84, .25, .015, .6], in_layout=True)
     cbar_ax2 = fig_cm.add_axes([.92, .25, .015, .6], in_layout=True)
 
-    for sex, ax_cm in zip(['chrXY', 'chrX', 'chrY', 'autosome'], axs_cm.flat):
+    for sex_chromosome, ax_cm in zip(['chr_aXY', 'chr_aX', 'chr_aY', 'autosomes'], axs_cm.flat):
         # for sex in ['chrXY']:
-        result_dict[organ][sex] = {}
+        result_dict[organ][sex_chromosome] = {}
 
         print("*" * 20)
         print(organ)
         print(model_type)
-        print(sex)
+        print(sex_chromosome)
         print("*" * 20)
 
         # n_features = 0
-        n_features = n_featues_dict[organ][sex]
+        n_features = n_featues_dict[organ][sex_chromosome]
 
-        with open(f'models/{model_type}.json', 'r') as file:
-            model_params = json.load(file)
+        with open(f'models/model_params.json', 'r') as file:
+            model_params = json.load(file)[model_type]
         model_params = model_params[value_to_predict]
+        model_params['max_depth'] = 7
 
-        data = pd.read_hdf(fdir_traintest / f'geuvadis.preprocessed.sex.h5', key=sex)
+        adata = ad.read(fdir_processed / f'{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad')
+        adata = adata[:, adata.varm[sex_chromosome]]
 
         features = pd.read_hdf(
-            fdir_processed / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
-            key=f'{sex}',
+            fdir_intermediate / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
+            key=f'{sex_chromosome}',
         )
 
         features = features[feature_importance_method]
         features = features.sort_values(ascending=False)
 
-        if organ != "None":
+        if organ not in ["None", 'CAGE.heart']:
             fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
             fname = fname.name
 
@@ -145,7 +155,7 @@ for organ in ["None"]:
             else:
                 print(features.shape)
 
-        features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
+        features_fname = f"{filename_prefixes[organ]}_train_features_{sex_chromosome}_calibration_{organ}.csv"
 
         if n_features != 0:
             if save_features:
@@ -159,12 +169,10 @@ for organ in ["None"]:
         if save_features:
             features_list.to_csv(ml_models_fdir / model_type / features_fname)
 
-        data = data[features_list.index]
+        adata = adata[:, features_list.index]
 
-        data_header = pd.read_hdf(fdir_processed / 'geuvadis.preprocessed.h5', key='header')
-
-        X = data.values
-        y = data_header['Sex']
+        X = adata.X
+        y = adata.obs[value_to_predict]
 
         # X_comps = PCA(2).fit_transform(X)
         # sns.scatterplot(x=X_comps[:, 0], y=X_comps[:, 1], hue=y)
@@ -264,7 +272,7 @@ for organ in ["None"]:
             recalls.append(recall_score(y_test, pred))
 
             if save_results:
-                saved_model_filename = f"geuvadis_fold{i}_{sex}_calibration_{organ}.json"
+                saved_model_filename = f"{filename_prefixes[organ]}_fold{i}_{sex_chromosome}_calibration_{organ}.json"
                 if model_type != 'knn':
                     model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
 
@@ -299,12 +307,12 @@ for organ in ["None"]:
         print(f"{total_recall=},")
         print("-" * 20)
 
-        result_dict[organ][sex]['mean_auc'] = total_auc
-        result_dict[organ][sex]['mean_accuracy'] = total_accuracy
-        result_dict[organ][sex]['mean_f1'] = total_f1
-        result_dict[organ][sex]['mean_precision'] = total_precision
-        result_dict[organ][sex]['mean_recall'] = total_recall
-        result_dict[organ][sex]['n_features'] = n_features
+        result_dict[organ][sex_chromosome]['mean_auc'] = total_auc
+        result_dict[organ][sex_chromosome]['mean_accuracy'] = total_accuracy
+        result_dict[organ][sex_chromosome]['mean_f1'] = total_f1
+        result_dict[organ][sex_chromosome]['mean_precision'] = total_precision
+        result_dict[organ][sex_chromosome]['mean_recall'] = total_recall
+        result_dict[organ][sex_chromosome]['n_features'] = n_features
 
         ax.plot(
             mean_fpr,
@@ -313,9 +321,9 @@ for organ in ["None"]:
             lw=2,
             alpha=0.8,
         )
-        plt.title(f"{model_type}, {sex}, {organ}")
+        plt.title(f"{model_type}, {sex_chromosome}, {organ}")
         if save_results:
-            plt.savefig(f'reports/figures/geuvadis_{sex}_organ_{organ}_ROC.png', dpi=300)
+            plt.savefig(f'reports/figures/{filename_prefixes[organ]}_{sex_chromosome}_organ_{organ}_ROC.png', dpi=300)
             plt.close()
         else:
             plt.show()
@@ -343,27 +351,27 @@ for organ in ["None"]:
                     vmin=0, vmax=len(y), fmt='',
                     mask=~mask_diag,
                     cbar_kws={'orientation': 'vertical', 'format': "%1i"},
-                    cbar_ax=cbar_ax1 if sex == 'chrXY' else None,
-                    cbar=sex == 'chrXY',
+                    cbar_ax=cbar_ax1 if sex_chromosome == 'chrXY' else None,
+                    cbar=sex_chromosome == 'chrXY',
                     annot_kws=dict(ha='center'),
                     )
         sns.heatmap(cm, annot=cm_anno, cmap='Reds', ax=ax_cm, square=True,
                     vmin=0, vmax=len(y), fmt='',
                     mask=mask_diag,
                     cbar_kws={'orientation': 'vertical', 'format': "%1i"},
-                    cbar_ax=cbar_ax2 if sex == 'chrXY' else None,
-                    cbar=sex == 'chrXY',
+                    cbar_ax=cbar_ax2 if sex_chromosome == 'chrXY' else None,
+                    cbar=sex_chromosome == 'chrXY',
                     annot_kws=dict(ha='center'),
                     )
         ax_cm.set_xlabel('Predicted label')
         ax_cm.set_ylabel('True label')
         ax_cm.xaxis.set_ticklabels(['Female', 'Male'], )
         ax_cm.yaxis.set_ticklabels(['Female', 'Male'], rotation=0)
-        ax_cm.set_title(f"{sex_chromosome_names[sex]}")
+        ax_cm.set_title(f"{sex_chromosome}")
 
     fig_cm.tight_layout(rect=(0, 0, .87, 1))
     if save_results:
-        plt.savefig(f'reports/figures/geuvadis_cm_{organ}.png', dpi=300)
+        plt.savefig(f'reports/figures/{filename_prefixes[organ]}_cm_{organ}.png', dpi=300)
         plt.close()
     else:
         plt.show()
