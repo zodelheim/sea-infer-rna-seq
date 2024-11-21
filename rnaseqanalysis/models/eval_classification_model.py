@@ -13,20 +13,16 @@ from pathlib import Path
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, RocCurveDisplay, auc
 import json
 from tqdm import tqdm
+import anndata as ad
 
 
-fdir_raw = Path("data/raw/")
-fdir_processed = Path("data/interim")
-fdir_traintest = Path("data/processed") / 'sex'
-fdir_external = Path("data/external")
+from config import FDIR_EXTERNAL, FDIR_INTEMEDIATE, FDIR_PROCESSED, FDIR_RAW
+
+fdir_raw = FDIR_RAW
+fdir_intermediate = FDIR_INTEMEDIATE
+fdir_processed = FDIR_PROCESSED / 'sex'
+fdir_external = FDIR_EXTERNAL
 ml_models_fdir = Path("models")
-
-sex_chromosome_names = {
-    'chrXY': 'chr_aXY',
-    'autosome': "autosomes",
-    'chrX': "chr_aX",
-    'chrY': "chr_aY"
-}
 
 organ_names = {
     'BRAIN0': "BRAIN0",
@@ -39,6 +35,7 @@ use_CV = True
 
 model_type = 'catboost'
 model_type = 'xgboost'
+# model_type = 'random_forest'
 
 save_results = True
 
@@ -54,7 +51,7 @@ feature_importance_method = 'SHAP'
 # sex = 'chrY'
 # sex = 'autosome'
 
-value_to_predict = 'Sex'
+value_to_predict = 'sex'
 
 result_dict = {}
 
@@ -66,18 +63,18 @@ for organ in ["BRAIN1"]:
     cbar_ax1 = fig.add_axes([.84, .25, .015, .6], in_layout=True)
     cbar_ax2 = fig.add_axes([.92, .25, .015, .6], in_layout=True)
 
-    for sex, ax in zip(['chrXY', 'chrX', 'chrY', 'autosome'], axs.flat):
+    for sex_chromosomes, ax in zip(['chr_aXY', 'chr_aX', 'chr_aY', 'autosomes'], axs.flat):
         # for sex in ['chrXY']:
-        result_dict[organ][sex] = {}
+        result_dict[organ][sex_chromosomes] = {}
         print('```')
         print("*" * 20)
         print(organ)
         print(model_type)
-        print(sex)
+        print(sex_chromosomes)
         print("*" * 20)
 
-        with open(f'models/{model_type}.json', 'r') as file:
-            model_params = json.load(file)
+        with open(f'models/model_params.json', 'r') as file:
+            model_params = json.load(file)[model_type]
 
         if model_type == 'xgboost':
             model = xgb.XGBClassifier(**model_params)
@@ -102,7 +99,7 @@ for organ in ["BRAIN1"]:
         # else:
         #     print('ground true: ', (data_eval_header['sex'].values == 'male').astype(int))
 
-        features_fname = f"geuvadis_train_features_{sex}_calibration_{organ}.csv"
+        features_fname = f"geuvadis_train_features_{sex_chromosomes}_calibration_{organ}.csv"
         features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
         print(f"{len(features_list)=}")
         data_eval = data_eval[features_list.index]
@@ -134,7 +131,7 @@ for organ in ["BRAIN1"]:
         tot_auc = 0
 
         for i in range(5):
-            saved_model_filename = f"geuvadis_fold{i}_{sex}_calibration_{organ}.json"
+            saved_model_filename = f"geuvadis_fold{i}_{sex_chromosomes}_calibration_{organ}.json"
             model.load_model(fname=ml_models_fdir / model_type / saved_model_filename)
 
             proba += model.predict_proba(X)
@@ -172,11 +169,11 @@ for organ in ["BRAIN1"]:
         mean_precision = np.mean(precisions)
         mean_recall = np.mean(recalls)
 
-        result_dict[organ][sex]["mean_auc"] = mean_auc
-        result_dict[organ][sex]["mean_accuracy"] = mean_accuracy
-        result_dict[organ][sex]["mean_f1"] = mean_f1
-        result_dict[organ][sex]["mean_precision"] = mean_precision
-        result_dict[organ][sex]["mean_recall"] = mean_recall
+        result_dict[organ][sex_chromosomes]["mean_auc"] = mean_auc
+        result_dict[organ][sex_chromosomes]["mean_accuracy"] = mean_accuracy
+        result_dict[organ][sex_chromosomes]["mean_f1"] = mean_f1
+        result_dict[organ][sex_chromosomes]["mean_precision"] = mean_precision
+        result_dict[organ][sex_chromosomes]["mean_recall"] = mean_recall
 
         print("-" * 20)
         print(f"{mean_auc=},")
@@ -229,23 +226,23 @@ for organ in ["BRAIN1"]:
                     vmin=0, vmax=len(y), fmt='',
                     mask=~mask_diag,
                     cbar_kws={'orientation': 'vertical', 'format': "%1i"},
-                    cbar_ax=cbar_ax1 if sex == 'chrXY' else None,
-                    cbar=sex == 'chrXY',
+                    cbar_ax=cbar_ax1 if sex_chromosomes == 'chrXY' else None,
+                    cbar=sex_chromosomes == 'chrXY',
                     annot_kws=dict(ha='center'),
                     )
         sns.heatmap(cm, annot=cm_anno, cmap='Reds', ax=ax, square=True,
                     vmin=0, vmax=len(y), fmt='',
                     mask=mask_diag,
                     cbar_kws={'orientation': 'vertical', 'format': "%1i"},
-                    cbar_ax=cbar_ax2 if sex == 'chrXY' else None,
-                    cbar=sex == 'chrXY',
+                    cbar_ax=cbar_ax2 if sex_chromosomes == 'chrXY' else None,
+                    cbar=sex_chromosomes == 'chrXY',
                     annot_kws=dict(ha='center'),
                     )
         ax.set_xlabel('Predicted label')
         ax.set_ylabel('True label')
         ax.xaxis.set_ticklabels(['Female', 'Male'], )
         ax.yaxis.set_ticklabels(['Female', 'Male'], rotation=0)
-        ax.set_title(f"{sex_chromosome_names[sex]}")
+        ax.set_title(f"{sex_chromosomes}")
 
         # plt.title(f"{model_type}, {sex}, {organ}")
         # plt.tight_layout()
