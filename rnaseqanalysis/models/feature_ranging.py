@@ -36,6 +36,9 @@ model_type = 'catboost'
 model_type = 'xgboost'
 # model_type = 'random_forest'
 
+Scaler = RobustScaler
+Scaler = StandardScaler
+
 # sex = 'chrXY'
 # sex = 'autosome'
 
@@ -48,16 +51,19 @@ value_to_predict = 'sex'
 
 filename_prefixes = {
     "None": "geuvadis",
-    'CAGE.heart': "CAGE.heart"
+    'CAGE.HEART': "CAGE.HEART"
 }
+
+drop_duplicates = False
+drop_duplicates = True
 
 
 # value_to_predict = 'Experimental_Factor:_population (exp)'
 
 # for organ in ['BRAIN1']:
 # for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
-# for organ in ['CAGE.heart']:
-for organ in ['None']:
+for organ in ['CAGE.HEART']:
+    # for organ in ['None']:
     # for sex_chromosome in ['chrXY']:
     for sex_chromosome in ['chr_aXY', 'autosomes', 'chr_aX', 'chr_aY']:
 
@@ -65,10 +71,13 @@ for organ in ['None']:
             model_params = json.load(file)[model_type]
         model_params = model_params[value_to_predict]
 
-        adata = ad.read(fdir_processed / f"GEUVADIS.preprocessed.{value_to_predict}.h5ad")
+        adata = ad.read_h5ad(fdir_processed / f"{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad")
         adata = adata[:, adata.varm[sex_chromosome]]
 
-        if organ not in ["None", "CAGE.heart"]:
+        if drop_duplicates:
+            adata = adata[:, adata.varm['unique']]
+
+        if organ not in ["None", "CAGE.HEART"]:
             fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
             fname = fname.name
 
@@ -110,8 +119,8 @@ for organ in ['None']:
             X_test = X[val]
             y_test = y[val]
 
-            train_scaler = RobustScaler().fit(X_train)
-            test_scaler = RobustScaler().fit(X_test)
+            train_scaler = Scaler().fit(X_train)
+            test_scaler = Scaler().fit(X_test)
 
             X_train = train_scaler.transform(X_train)
             X_test = test_scaler.transform(X_test)
