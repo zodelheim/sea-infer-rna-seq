@@ -38,6 +38,9 @@ model_type = 'xgboost'
 # model_type = 'random_forest'
 # model_type = 'knn'
 
+Scaler = StandardScaler
+# Scaler = RobustScaler
+
 feature_importance_method = 'native'
 feature_importance_method = 'SHAP'
 
@@ -46,7 +49,7 @@ organ_names = {
     "HEART": "HEART",
     "BRAIN1": "BRAIN1",
     'None': "BLOOD",
-    'CAGE.heart': 'CAGE.heart'
+    'CAGE.HEART': 'CAGE.HEART'
 }
 
 value_to_predict = 'sex'
@@ -85,28 +88,30 @@ n_featues_dict = {
         'chr_aY': 3,
         'autosomes': 82,
     },
-    'CAGE.heart': {
-        'chr_aXY': 100,
-        'chr_aX': 100,
-        'chr_aY': 100,
-        'autosomes': 100,
+    'CAGE.HEART': {
+        'chr_aXY': 6,
+        'chr_aX': 27,
+        'chr_aY': 22,
+        'autosomes': 22,
     }
 }
 
 filename_prefixes = {
     "None": "geuvadis",
-    'CAGE.heart': "CAGE.heart"
+    'CAGE.HEART': "CAGE.HEART"
 }
 
 
 features_shapsumm_threshold = 45
 
-save_results = False
-save_features = False
+save_results = True
+save_features = True
+
+drop_duplicates = True
 
 # for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
-# for organ in ["CAGE.heart"]:
-for organ in ["None"]:
+for organ in ["CAGE.HEART"]:
+    # for organ in ["None"]:
     result_dict[organ] = {}
 
     fig_cm, axs_cm = plt.subplots(2, 2)
@@ -129,10 +134,13 @@ for organ in ["None"]:
         with open(f'models/model_params.json', 'r') as file:
             model_params = json.load(file)[model_type]
         model_params = model_params[value_to_predict]
-        model_params['max_depth'] = 7
+        # model_params['max_depth'] = 7
 
-        adata = ad.read(fdir_processed / f'{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad')
+        adata = ad.read_h5ad(fdir_processed / f'{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad')
         adata = adata[:, adata.varm[sex_chromosome]]
+
+        if drop_duplicates:
+            adata = adata[:, adata.varm['unique']]
 
         features = pd.read_hdf(
             fdir_intermediate / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
@@ -142,7 +150,7 @@ for organ in ["None"]:
         features = features[feature_importance_method]
         features = features.sort_values(ascending=False)
 
-        if organ not in ["None", 'CAGE.heart']:
+        if organ not in ["None", 'CAGE.HEART']:
             fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
             fname = fname.name
 
@@ -217,11 +225,8 @@ for organ in ["None"]:
             X_test = X[val]
             y_test = y[val]
 
-            # train_scaler = StandardScaler().fit(X_train)
-            # test_scaler = StandardScaler().fit(X_test)
-
-            train_scaler = RobustScaler().fit(X_train)
-            test_scaler = RobustScaler().fit(X_test)
+            train_scaler = Scaler().fit(X_train)
+            test_scaler = Scaler().fit(X_test)
 
             X_train = train_scaler.transform(X_train)
             X_test = test_scaler.transform(X_test)
