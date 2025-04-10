@@ -9,6 +9,7 @@ from tqdm import tqdm
 from gtfparse import read_gtf
 from prefect import flow, task
 import anndata as ad
+from loguru import logger
 
 from config import FDIR_EXTERNAL, FDIR_RAW, FDIR_PROCESSED, FDIR_INTEMEDIATE
 
@@ -202,10 +203,12 @@ def make_train_dataset(organ="None", splitby=None):
     if organ == "None":
         dataset_name = "geuvadis"
 
+    logger.info(f"{dataset_name=}")
     adata = ad.read_h5ad(FDIR_INTEMEDIATE / f"{dataset_name.upper()}.raw.h5ad")
 
     datasets = {}
     if splitby:
+        logger.info(f"{dataset_name} splet by {splitby}")
         categories = adata.obs[splitby].unique()
         for category in categories:
             datasets[category] = adata.to_df()[adata.obs[splitby] == category]
@@ -215,23 +218,37 @@ def make_train_dataset(organ="None", splitby=None):
     columns_ = pd.Index([])
 
     for key, data_raw in datasets.items():
+        logger.info(f"{key=}")
+        logger.info(f"{dataset_name} under key {key} has {len(data_raw.columns)} transcripts")
+        logger.info(f"{dataset_name} under key {key} zero median filtered")
         data_ = filter_zero_median(data_raw)
-        data_ = filter_correlated(data_, adata.obs[value_to_predict].loc[data_.index])
+
+        if dataset_name != "geuvadis":
+            columns_ = columns_.union(data_.columns)
+            continue
+
+        # data_ = filter_correlated(data_, adata.obs[value_to_predict].loc[data_.index])
+        logger.info(f"{dataset_name} under key {key}  logarithmized")
         data_ = logarithmization(data_)
 
         # data_ = filter_cv_threshold(data_, 0.7)
+        logger.info(f"{dataset_name} under key {key}  mean > q34 filtered")
         data_ = filter_median_q34(data_)
         # data_ = filter_cv_q34(data_)
 
+        logger.info(f"store {len(data_.columns)} transcripts")
         columns_ = columns_.union(data_.columns)
 
     adata = adata[:, columns_]
-    print(f"shape after filtration: {adata.shape=}")
+    logger.info(f"shape after key-wised filtration: {adata.shape=}")
 
+    logger.info(f"{dataset_name} logarithmized")
     data = logarithmization(adata.to_df())
 
     # CV together, median - separate
-    data = filter_cv_q34(data)
+    if dataset_name == "geuvadis":
+        logger.info(f"{dataset_name} logarithmized")
+        data = filter_cv_q34(data)
 
     data = data.astype(np.float32)
 
@@ -239,6 +256,7 @@ def make_train_dataset(organ="None", splitby=None):
     adata.layers["raw"] = adata.X.copy()
     adata.X = data.values
 
+    logger.info("split by sex")
     adata = split_by_sex_transcripts(adata)
 
     # gtf_data = gtf_data.loc[data.columns]
@@ -261,9 +279,11 @@ def make_train_dataset(organ="None", splitby=None):
 
 
 if __name__ == "__main__":
-    # organ = 'None'
-    organ = "HEART"
+    # organ = "None"
+    # make_train_dataset(organ=organ, splitby="sex")
+
+    # organ = "HEART"
     # organ = 'BRAIN0'
     # organ = 'BRAIN1'
-
-    make_train_dataset(organ=organ, splitby="sex")
+    for organ in ["HEART", "BRAIN0", "BRAIN1"]:
+        make_train_dataset(organ=organ)
