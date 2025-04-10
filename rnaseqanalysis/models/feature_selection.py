@@ -1,6 +1,14 @@
 import pandas as pd
 import numpy as np
-from sklearn.metrics import make_scorer, accuracy_score, f1_score, roc_auc_score, precision_score, recall_score, classification_report
+from sklearn.metrics import (
+    make_scorer,
+    accuracy_score,
+    f1_score,
+    roc_auc_score,
+    precision_score,
+    recall_score,
+    classification_report,
+)
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler, RobustScaler
@@ -21,15 +29,15 @@ from tqdm import tqdm
 
 fdir_raw = FDIR_RAW
 fdir_intermediate = FDIR_INTEMEDIATE
-fdir_processed = FDIR_PROCESSED / 'sex'
+fdir_processed = FDIR_PROCESSED / "sex"
 fdir_external = FDIR_EXTERNAL
 ml_models_fdir = Path("models")
 
 
 use_CV = True
 
-model_type = 'catboost'
-model_type = 'xgboost'
+model_type = "catboost"
+model_type = "xgboost"
 # model_type = "random_forest"
 
 Scaler = RobustScaler
@@ -38,58 +46,61 @@ Scaler = StandardScaler
 # sex = 'chrXY'
 # sex = 'autosome'
 
-feature_importance_method = 'native'
-feature_importance_method = 'SHAP'
+feature_importance_method = "native"
+feature_importance_method = "SHAP"
 
 
 organ_names = {
-    'BRAIN0': "BRAIN0",
+    "BRAIN0": "BRAIN0",
     "HEART": "HEART",
     "BRAIN1": "BRAIN1",
-    'None': "BLOOD",
-    'CAGE.HEART': 'CAGE.HEART'
+    "None": "BLOOD",
+    "CAGE.HEART": "CAGE.HEART",
 }
 
-filename_prefixes = {
-    "None": "geuvadis",
-    'CAGE.HEART': "CAGE.HEART"
-}
+filename_prefixes = {"None": "geuvadis", "CAGE.HEART": "CAGE.HEART"}
 
 
 n_threads = 6
 
-value_to_predict = 'sex'
+value_to_predict = "sex"
 # value_to_predict = 'Experimental_Factor:_population (exp)'
 
 drop_duplicates = True
+drop_duplicates = False
 
 # for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 # for organ in ['None']:
-for organ in ['CAGE.HEART']:
+for organ in ["CAGE.HEART"]:
     # for sex_chromosome in ['chr_aXY']:
-    for sex_chromosome in ['chr_aXY', 'autosomes', 'chr_aX', 'chr_aY']:
-
-        with open(f'models/model_params.json', 'r') as file:
+    for sex_chromosome in ["chr_aXY", "autosomes", "chr_aX", "chr_aY"]:
+        with open(f"models/model_params.json", "r") as file:
             model_params = json.load(file)[model_type]
         model_params = model_params[value_to_predict]
 
         # print(model_params)
-        adata = ad.read_h5ad(fdir_processed / f"{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad")
+        adata = ad.read_h5ad(
+            fdir_processed
+            / f"{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad"
+        )
         adata = adata[:, adata.varm[sex_chromosome]]
 
         if drop_duplicates:
-            adata = adata[:, adata.varm['unique']]
+            adata = adata[:, adata.varm["unique"]]
 
-        feature_importance_df = pd.read_hdf(fdir_intermediate / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
-                                            key=f'{sex_chromosome}',)
+        feature_importance_df = pd.read_hdf(
+            fdir_intermediate
+            / f"feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5",
+            key=f"{sex_chromosome}",
+        )
 
         features = feature_importance_df[feature_importance_method]
 
-        if organ not in ["None", 'CAGE.HEART']:
-            fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
+        if organ not in ["None", "CAGE.HEART"]:
+            fname = next((fdir_external / organ / "reg").glob("*processed.h5"))
             fname = fname.name
 
-            data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
+            data_eval = pd.read_hdf(fdir_external / organ / "reg" / fname, index_col=0)
             features = features.loc[features.index.intersection(data_eval.columns)]
 
         features = features.sort_values(ascending=False).index
@@ -154,25 +165,28 @@ for organ in ['CAGE.HEART']:
                 y_val = y_test
 
                 # with Live("models/log") as live:
-                if model_type == 'xgboost':
+                if model_type == "xgboost":
                     # model_params["callbacks"] = [DVCLiveCallback()]
                     model = xgb.XGBClassifier(**model_params)
-                    model.fit(cupy.array(X_train_), y_train_,
-                              eval_set=[(X_val, y_val)],
-                              verbose=False)
+                    model.fit(
+                        cupy.array(X_train_), y_train_, eval_set=[(X_val, y_val)], verbose=False
+                    )
 
                     X_test_c = cupy.array(X_test)
 
-                if model_type == 'catboost':
+                if model_type == "catboost":
                     model = CatBoostClassifier(**model_params)
-                    model.fit(X_train_, y_train_,
-                              eval_set=(X_val, y_val),
-                              verbose=False,
-                              use_best_model=True,
-                              plot=False,
-                              early_stopping_rounds=20)
+                    model.fit(
+                        X_train_,
+                        y_train_,
+                        eval_set=(X_val, y_val),
+                        verbose=False,
+                        use_best_model=True,
+                        plot=False,
+                        early_stopping_rounds=20,
+                    )
 
-                if model_type == 'random_forest':
+                if model_type == "random_forest":
                     model = RandomForestClassifier()
                     model.fit(X_train, y_train)
                     X_test_c = X_test
@@ -206,17 +220,42 @@ for organ in ['CAGE.HEART']:
         recall_array_df = pd.DataFrame.from_dict(recall_array_total)
 
         plt.figure()
-        plt.errorbar(np.arange(1, max_n_features), roc_array_df.mean(), yerr=roc_array_df.std(), label='roc auc')
-        plt.errorbar(np.arange(1, max_n_features), accuracy_array_df.mean(), yerr=accuracy_array_df.std(), label='accuracy')
-        plt.errorbar(np.arange(1, max_n_features), f1_array_df.mean(), yerr=f1_array_df.std(), label='f1')
-        plt.errorbar(np.arange(1, max_n_features), precision_array_df.mean(), yerr=precision_array_df.std(), label='precision')
-        plt.errorbar(np.arange(1, max_n_features), recall_array_df.mean(), yerr=recall_array_df.std(), label='recall')
+        plt.errorbar(
+            np.arange(1, max_n_features),
+            roc_array_df.mean(),
+            yerr=roc_array_df.std(),
+            label="roc auc",
+        )
+        plt.errorbar(
+            np.arange(1, max_n_features),
+            accuracy_array_df.mean(),
+            yerr=accuracy_array_df.std(),
+            label="accuracy",
+        )
+        plt.errorbar(
+            np.arange(1, max_n_features), f1_array_df.mean(), yerr=f1_array_df.std(), label="f1"
+        )
+        plt.errorbar(
+            np.arange(1, max_n_features),
+            precision_array_df.mean(),
+            yerr=precision_array_df.std(),
+            label="precision",
+        )
+        plt.errorbar(
+            np.arange(1, max_n_features),
+            recall_array_df.mean(),
+            yerr=recall_array_df.std(),
+            label="recall",
+        )
         plt.title(sex_chromosome + ", organ: " + organ_names[organ])
         plt.ylim((0.4, 1.0))
-        plt.ylabel('score value')
-        plt.xlabel('# transcripts')
+        plt.ylabel("score value")
+        plt.xlabel("# transcripts")
         plt.legend()
-        plt.savefig(f'reports/figures/nfeatures/{filename_prefixes[organ]}_{sex_chromosome}_organ_{organ}.png', dpi=300)
+        plt.savefig(
+            f"reports/figures/nfeatures/{filename_prefixes[organ]}_{sex_chromosome}_organ_{organ}.png",
+            dpi=300,
+        )
         plt.close()
         # plt.show()
         # exit()

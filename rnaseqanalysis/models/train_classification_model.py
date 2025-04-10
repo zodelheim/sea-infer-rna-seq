@@ -1,6 +1,14 @@
 import pandas as pd
 import numpy as np
-from sklearn.metrics import make_scorer, accuracy_score, f1_score, roc_auc_score, precision_score, recall_score, classification_report
+from sklearn.metrics import (
+    make_scorer,
+    accuracy_score,
+    f1_score,
+    roc_auc_score,
+    precision_score,
+    recall_score,
+    classification_report,
+)
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler, RobustScaler
@@ -27,32 +35,32 @@ from config import FDIR_EXTERNAL, FDIR_INTEMEDIATE, FDIR_PROCESSED, FDIR_RAW
 
 fdir_raw = FDIR_RAW
 fdir_intermediate = FDIR_INTEMEDIATE
-fdir_processed = FDIR_PROCESSED / 'sex'
+fdir_processed = FDIR_PROCESSED / "sex"
 fdir_external = FDIR_EXTERNAL
 ml_models_fdir = Path("models")
 
 use_CV = True
 
-model_type = 'catboost'
-model_type = 'xgboost'
+model_type = "catboost"
+model_type = "xgboost"
 # model_type = 'random_forest'
 # model_type = 'knn'
 
 Scaler = StandardScaler
 # Scaler = RobustScaler
 
-feature_importance_method = 'native'
-feature_importance_method = 'SHAP'
+feature_importance_method = "native"
+feature_importance_method = "SHAP"
 
 organ_names = {
-    'BRAIN0': "BRAIN0",
+    "BRAIN0": "BRAIN0",
     "HEART": "HEART",
     "BRAIN1": "BRAIN1",
-    'None': "BLOOD",
-    'CAGE.HEART': 'CAGE.HEART'
+    "None": "BLOOD",
+    "CAGE.HEART": "CAGE.HEART",
 }
 
-value_to_predict = 'sex'
+value_to_predict = "sex"
 # value_to_predict = 'population'
 
 result_dict = {}
@@ -64,50 +72,54 @@ n_featues_dict = {
     #     'chrY': 80,
     #     'autosome': 91,
     # },
-    'BRAIN0': {
-        'chr_aXY': 2,
-        'chr_aX': 6,
-        'chr_aY': 5,
-        'autosomes': 37,
+    "BRAIN0": {
+        "chr_aXY": 2,
+        "chr_aX": 6,
+        "chr_aY": 5,
+        "autosomes": 37,
     },
-    'BRAIN1': {
-        'chr_aXY': 7,
-        'chr_aX': 5,
-        'chr_aY': 5,
-        'autosomes': 59,
+    "BRAIN1": {
+        "chr_aXY": 7,
+        "chr_aX": 5,
+        "chr_aY": 5,
+        "autosomes": 59,
     },
-    'HEART': {
-        'chr_aXY': 9,
-        'chr_aX': 8,
-        'chr_aY': 93,
-        'autosomes': 82,
+    "HEART": {
+        "chr_aXY": 9,
+        "chr_aX": 8,
+        "chr_aY": 93,
+        "autosomes": 82,
     },
-    'None': {
-        'chr_aXY': 10,
-        'chr_aX': 10,
-        'chr_aY': 3,
-        'autosomes': 82,
+    "None": {
+        "chr_aXY": 10,
+        "chr_aX": 10,
+        "chr_aY": 3,
+        "autosomes": 82,
     },
-    'CAGE.HEART': {
-        'chr_aXY': 6,
-        'chr_aX': 27,
-        'chr_aY': 22,
-        'autosomes': 22,
-    }
+    # with filtered duplicates
+    # 'CAGE.HEART': {
+    #     'chr_aXY': 6,
+    #     'chr_aX': 27,
+    #     'chr_aY': 22,
+    #     'autosomes': 22,
+    # }
+    "CAGE.HEART": {
+        "chr_aXY": 6,  # 10
+        "chr_aX": 9,
+        "chr_aY": 9,
+        "autosomes": 20,
+    },
 }
 
-filename_prefixes = {
-    "None": "geuvadis",
-    'CAGE.HEART': "CAGE.HEART"
-}
+filename_prefixes = {"None": "geuvadis", "CAGE.HEART": "CAGE.HEART"}
 
 
 features_shapsumm_threshold = 45
 
 save_results = True
-save_features = True
+save_features = False
 
-drop_duplicates = True
+drop_duplicates = False
 
 # for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
 for organ in ["CAGE.HEART"]:
@@ -115,10 +127,10 @@ for organ in ["CAGE.HEART"]:
     result_dict[organ] = {}
 
     fig_cm, axs_cm = plt.subplots(2, 2)
-    cbar_ax1 = fig_cm.add_axes([.84, .25, .015, .6], in_layout=True)
-    cbar_ax2 = fig_cm.add_axes([.92, .25, .015, .6], in_layout=True)
+    cbar_ax1 = fig_cm.add_axes([0.84, 0.25, 0.015, 0.6], in_layout=True)
+    cbar_ax2 = fig_cm.add_axes([0.92, 0.25, 0.015, 0.6], in_layout=True)
 
-    for sex_chromosome, ax_cm in zip(['chr_aXY', 'chr_aX', 'chr_aY', 'autosomes'], axs_cm.flat):
+    for sex_chromosome, ax_cm in zip(["chr_aXY", "chr_aX", "chr_aY", "autosomes"], axs_cm.flat):
         # for sex in ['chrXY']:
         result_dict[organ][sex_chromosome] = {}
 
@@ -131,30 +143,34 @@ for organ in ["CAGE.HEART"]:
         # n_features = 0
         n_features = n_featues_dict[organ][sex_chromosome]
 
-        with open(f'models/model_params.json', 'r') as file:
+        with open(f"models/model_params.json", "r") as file:
             model_params = json.load(file)[model_type]
         model_params = model_params[value_to_predict]
         # model_params['max_depth'] = 7
 
-        adata = ad.read_h5ad(fdir_processed / f'{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad')
+        adata = ad.read_h5ad(
+            fdir_processed
+            / f"{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad"
+        )
         adata = adata[:, adata.varm[sex_chromosome]]
 
         if drop_duplicates:
-            adata = adata[:, adata.varm['unique']]
+            adata = adata[:, adata.varm["unique"]]
 
         features = pd.read_hdf(
-            fdir_intermediate / f'feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5',
-            key=f'{sex_chromosome}',
+            fdir_intermediate
+            / f"feature_importance.{model_type}.{value_to_predict}.organ_{organ}.h5",
+            key=f"{sex_chromosome}",
         )
 
         features = features[feature_importance_method]
         features = features.sort_values(ascending=False)
 
-        if organ not in ["None", 'CAGE.HEART']:
-            fname = next((fdir_external / organ / 'reg').glob("*processed.h5"))
+        if organ not in ["None", "CAGE.HEART"]:
+            fname = next((fdir_external / organ / "reg").glob("*processed.h5"))
             fname = fname.name
 
-            data_eval = pd.read_hdf(fdir_external / organ / 'reg' / fname, index_col=0)
+            data_eval = pd.read_hdf(fdir_external / organ / "reg" / fname, index_col=0)
             features = features.loc[features.index.intersection(data_eval.columns)]
 
             if n_features != 0:
@@ -163,13 +179,18 @@ for organ in ["CAGE.HEART"]:
             else:
                 print(features.shape)
 
-        features_fname = f"{filename_prefixes[organ]}_train_features_{sex_chromosome}_calibration_{organ}.csv"
+        features_fname = (
+            f"{filename_prefixes[organ]}_train_features_{sex_chromosome}_calibration_{organ}.csv"
+        )
 
         if n_features != 0:
             if save_features:
                 features_list = features.iloc[:n_features]
             else:
-                features_list = pd.read_csv(ml_models_fdir / model_type / features_fname, index_col=0)
+                features_list = pd.read_csv(
+                    ml_models_fdir / model_type / features_fname, dtype=object
+                )
+                features_list.set_index("Feature", inplace=True)
         else:
             features_list = features.loc[features >= features_shapsumm_threshold]
             n_features = len(features_list)
@@ -236,20 +257,23 @@ for organ in ["CAGE.HEART"]:
             X_val = X_test
             y_val = y_test
 
-            if model_type == 'xgboost':
+            if model_type == "xgboost":
                 model = xgb.XGBClassifier(**model_params)
                 model.fit(cupy.array(X_train_), y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
-            if model_type == 'catboost':
+            if model_type == "catboost":
                 model = CatBoostClassifier(**model_params)
-                model.fit(X_train_, y_train_,
-                          eval_set=(X_val, y_val),
-                          verbose=False,
-                          use_best_model=True,
-                          plot=False,
-                          early_stopping_rounds=20)
+                model.fit(
+                    X_train_,
+                    y_train_,
+                    eval_set=(X_val, y_val),
+                    verbose=False,
+                    use_best_model=True,
+                    plot=False,
+                    early_stopping_rounds=20,
+                )
 
-            if model_type == 'knn':
+            if model_type == "knn":
                 model = KNeighborsClassifier(**model_params)
                 model.fit(X_train_, y_train_)
 
@@ -263,7 +287,8 @@ for organ in ["CAGE.HEART"]:
             preds_proba[val] = pred_prob[:, 1]
 
             viz = RocCurveDisplay.from_predictions(
-                y_test, pred_prob[:, 1],
+                y_test,
+                pred_prob[:, 1],
                 ax=ax,
             )
 
@@ -277,8 +302,10 @@ for organ in ["CAGE.HEART"]:
             recalls.append(recall_score(y_test, pred))
 
             if save_results:
-                saved_model_filename = f"{filename_prefixes[organ]}_fold{i}_{sex_chromosome}_calibration_{organ}.json"
-                if model_type != 'knn':
+                saved_model_filename = (
+                    f"{filename_prefixes[organ]}_fold{i}_{sex_chromosome}_calibration_{organ}.json"
+                )
+                if model_type != "knn":
                     model.save_model(fname=ml_models_fdir / model_type / saved_model_filename)
 
         mean_tpr = np.mean(tprs, axis=0)
@@ -312,12 +339,12 @@ for organ in ["CAGE.HEART"]:
         print(f"{total_recall=},")
         print("-" * 20)
 
-        result_dict[organ][sex_chromosome]['mean_auc'] = total_auc
-        result_dict[organ][sex_chromosome]['mean_accuracy'] = total_accuracy
-        result_dict[organ][sex_chromosome]['mean_f1'] = total_f1
-        result_dict[organ][sex_chromosome]['mean_precision'] = total_precision
-        result_dict[organ][sex_chromosome]['mean_recall'] = total_recall
-        result_dict[organ][sex_chromosome]['n_features'] = n_features
+        result_dict[organ][sex_chromosome]["mean_auc"] = total_auc
+        result_dict[organ][sex_chromosome]["mean_accuracy"] = total_accuracy
+        result_dict[organ][sex_chromosome]["mean_f1"] = total_f1
+        result_dict[organ][sex_chromosome]["mean_precision"] = total_precision
+        result_dict[organ][sex_chromosome]["mean_recall"] = total_recall
+        result_dict[organ][sex_chromosome]["n_features"] = n_features
 
         ax.plot(
             mean_fpr,
@@ -328,7 +355,10 @@ for organ in ["CAGE.HEART"]:
         )
         plt.title(f"{model_type}, {sex_chromosome}, {organ}")
         if save_results:
-            plt.savefig(f'reports/figures/{filename_prefixes[organ]}_{sex_chromosome}_organ_{organ}_ROC.png', dpi=300)
+            plt.savefig(
+                f"reports/figures/{filename_prefixes[organ]}_{sex_chromosome}_organ_{organ}_ROC.png",
+                dpi=300,
+            )
             plt.close()
         else:
             plt.show()
@@ -349,39 +379,61 @@ for organ in ["CAGE.HEART"]:
 
         cm_anno = [[], []]
 
-        cm_anno[0] = [f"{cm[0, 0]} \n ({round(cm_[0, 0])}%)", f"{cm[0, 1]} \n ({round(cm_[0, 1])}%)"]
-        cm_anno[1] = [f"{cm[1, 0]} \n ({round(cm_[1, 0])}%)", f"{cm[1, 1]} \n ({round(cm_[1, 1])}%)"]
+        cm_anno[0] = [
+            f"{cm[0, 0]} \n ({round(cm_[0, 0])}%)",
+            f"{cm[0, 1]} \n ({round(cm_[0, 1])}%)",
+        ]
+        cm_anno[1] = [
+            f"{cm[1, 0]} \n ({round(cm_[1, 0])}%)",
+            f"{cm[1, 1]} \n ({round(cm_[1, 1])}%)",
+        ]
 
-        sns.heatmap(cm, annot=cm_anno, cmap='Blues', ax=ax_cm, square=True,
-                    vmin=0, vmax=len(y), fmt='',
-                    mask=~mask_diag,
-                    cbar_kws={'orientation': 'vertical', 'format': "%1i"},
-                    cbar_ax=cbar_ax1 if sex_chromosome == 'chrXY' else None,
-                    cbar=sex_chromosome == 'chrXY',
-                    annot_kws=dict(ha='center'),
-                    )
-        sns.heatmap(cm, annot=cm_anno, cmap='Reds', ax=ax_cm, square=True,
-                    vmin=0, vmax=len(y), fmt='',
-                    mask=mask_diag,
-                    cbar_kws={'orientation': 'vertical', 'format': "%1i"},
-                    cbar_ax=cbar_ax2 if sex_chromosome == 'chrXY' else None,
-                    cbar=sex_chromosome == 'chrXY',
-                    annot_kws=dict(ha='center'),
-                    )
-        ax_cm.set_xlabel('Predicted label')
-        ax_cm.set_ylabel('True label')
-        ax_cm.xaxis.set_ticklabels(['Female', 'Male'], )
-        ax_cm.yaxis.set_ticklabels(['Female', 'Male'], rotation=0)
+        sns.heatmap(
+            cm,
+            annot=cm_anno,
+            cmap="Blues",
+            ax=ax_cm,
+            square=True,
+            vmin=0,
+            vmax=len(y),
+            fmt="",
+            mask=~mask_diag,
+            cbar_kws={"orientation": "vertical", "format": "%1i"},
+            cbar_ax=cbar_ax1 if sex_chromosome == "chrXY" else None,
+            cbar=sex_chromosome == "chrXY",
+            annot_kws=dict(ha="center"),
+        )
+        sns.heatmap(
+            cm,
+            annot=cm_anno,
+            cmap="Reds",
+            ax=ax_cm,
+            square=True,
+            vmin=0,
+            vmax=len(y),
+            fmt="",
+            mask=mask_diag,
+            cbar_kws={"orientation": "vertical", "format": "%1i"},
+            cbar_ax=cbar_ax2 if sex_chromosome == "chrXY" else None,
+            cbar=sex_chromosome == "chrXY",
+            annot_kws=dict(ha="center"),
+        )
+        ax_cm.set_xlabel("Predicted label")
+        ax_cm.set_ylabel("True label")
+        ax_cm.xaxis.set_ticklabels(
+            ["Female", "Male"],
+        )
+        ax_cm.yaxis.set_ticklabels(["Female", "Male"], rotation=0)
         ax_cm.set_title(f"{sex_chromosome}")
 
-    fig_cm.tight_layout(rect=(0, 0, .87, 1))
+    fig_cm.tight_layout(rect=(0, 0, 0.87, 1))
     if save_results:
-        plt.savefig(f'reports/figures/{filename_prefixes[organ]}_cm_{organ}.png', dpi=300)
+        plt.savefig(f"reports/figures/{filename_prefixes[organ]}_cm_{organ}.png", dpi=300)
         plt.close()
     else:
         plt.show()
 
 
 if save_results:
-    with open(f'reports/train_result_{value_to_predict}_{model_type}.json', 'w') as file:
+    with open(f"reports/train_result_{value_to_predict}_{model_type}.json", "w") as file:
         json.dump(result_dict, file)
