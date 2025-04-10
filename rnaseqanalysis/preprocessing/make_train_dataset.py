@@ -13,7 +13,7 @@ import anndata as ad
 from config import FDIR_EXTERNAL, FDIR_RAW, FDIR_PROCESSED, FDIR_INTEMEDIATE
 
 
-@task(log_prints=True, description='drop zero median transcripts')
+@task(log_prints=True, description="drop zero median transcripts")
 def filter_zero_median(df: pd.DataFrame) -> pd.DataFrame:
     df_median = df.median()
     if (df_median == 0).any():
@@ -22,16 +22,16 @@ def filter_zero_median(df: pd.DataFrame) -> pd.DataFrame:
         #       " features will be removed, due to a zero median value")
         df = df.drop(columns=cols_to_drop)
         # print("Current dataset size: ", df.shape)
-        print('Dataset shape: ', df.shape)
+        print("Dataset shape: ", df.shape)
         return df
 
     # print("Zero median columns aren't found")
-    print('Dataset shape: ', df.shape)
+    print("Dataset shape: ", df.shape)
 
     return df
 
 
-@task(log_prints=True, description='drop correlated transcripts')
+@task(log_prints=True, description="drop correlated transcripts")
 def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.8) -> pd.DataFrame:
     X_corr = X
     y_corr = y
@@ -49,17 +49,17 @@ def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.
             columns_to_drop.append(c)
 
     X = X.drop(columns=columns_to_drop)
-    print('Dataset shape: ', X.shape)
+    print("Dataset shape: ", X.shape)
     return X
 
 
-@task(log_prints=True, description='logarithmization (log2(x+1))')
+@task(log_prints=True, description="logarithmization (log2(x+1))")
 def logarithmization(df: pd.DataFrame):
     df = np.log2(df + 1)
     return df
 
 
-@task(log_prints=True, description='drop transcripts with cv < threshold')
+@task(log_prints=True, description="drop transcripts with cv < threshold")
 def filter_cv_threshold(df: pd.DataFrame, threshold: float):
     cv = df.std() / df.mean()
     low_cv_cols = cv[cv < threshold].index
@@ -71,31 +71,30 @@ def filter_cv_threshold(df: pd.DataFrame, threshold: float):
     #     print("No features found with coefficient of variation below the threshold.")
     # print(f"Current amount of features is {len(df.columns)}")
 
-    print('Dataset shape: ', df.shape)
+    print("Dataset shape: ", df.shape)
     return df
 
 
-@task(log_prints=True, description='filter transcripts with mean < median')
+@task(log_prints=True, description="filter transcripts with mean < median")
 def filter_median_q34(data: pd.DataFrame):
     mean = data.mean(axis=0)
     median = mean.median()
     data = data.loc[:, mean > median]
-    print('Dataset shape: ', data.shape)
+    print("Dataset shape: ", data.shape)
     return data
 
 
-@task(log_prints=True, description='filter transcripts with cv mean < cv median')
+@task(log_prints=True, description="filter transcripts with cv mean < cv median")
 def filter_cv_q34(data: pd.DataFrame):
     cv = data.std() / data.mean()
     median_cv = cv.median()
     data = data.loc[:, cv > median_cv]
-    print('Dataset shape: ', data.shape)
+    print("Dataset shape: ", data.shape)
     return data
 
 
-@task(log_prints=True, description='extract Sex (chrX, chrY) transcripts from gtf')
-def locate_sex_transcripts(gtf_data: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
-
+@task(log_prints=True, description="extract Sex (chrX, chrY) transcripts from gtf")
+def locate_sex_transcripts(gtf_data: pd.DataFrame, drop_duplicates) -> tuple[pd.Series, pd.Series]:
     # from https://www.ensembl.org/info/genome/genebuild/human_PARS.html
 
     pseudoautosoms_Y1 = [10001, 2781479]
@@ -103,32 +102,46 @@ def locate_sex_transcripts(gtf_data: pd.DataFrame) -> tuple[pd.Series, pd.Series
     pseudoautosoms_Y2 = [56887903, 57217415]
     pseudoautosoms_X2 = [155701383, 156030895]
 
-    transcripts_x = gtf_data.loc[gtf_data['seqname'] == 'chrX']
-    transcripts_y = gtf_data.loc[gtf_data['seqname'] == 'chrY']
+    transcripts_x = gtf_data.loc[gtf_data["seqname"] == "chrX"]
+    transcripts_y = gtf_data.loc[gtf_data["seqname"] == "chrY"]
 
-    true_transcripts_x = transcripts_x.loc[((transcripts_x['end'] < pseudoautosoms_X1[0])
-                                            | ((transcripts_x["start"] > pseudoautosoms_X1[1]) & (transcripts_x["end"] < pseudoautosoms_X2[0]))
-                                            | (transcripts_x["start"] > pseudoautosoms_X2[1])
-                                            )]
+    true_transcripts_x = transcripts_x.loc[
+        (
+            (transcripts_x["end"] < pseudoautosoms_X1[0])
+            | (
+                (transcripts_x["start"] > pseudoautosoms_X1[1])
+                & (transcripts_x["end"] < pseudoautosoms_X2[0])
+            )
+            | (transcripts_x["start"] > pseudoautosoms_X2[1])
+        )
+    ]
 
-    true_transcripts_y = transcripts_y.loc[((transcripts_y['end'] < pseudoautosoms_Y1[0])
-                                            | ((transcripts_y["start"] > pseudoautosoms_Y1[1]) & (transcripts_y["end"] < pseudoautosoms_Y2[0]))
-                                            | (transcripts_y["start"] > pseudoautosoms_Y2[1])
-                                            )]
+    true_transcripts_y = transcripts_y.loc[
+        (
+            (transcripts_y["end"] < pseudoautosoms_Y1[0])
+            | (
+                (transcripts_y["start"] > pseudoautosoms_Y1[1])
+                & (transcripts_y["end"] < pseudoautosoms_Y2[0])
+            )
+            | (transcripts_y["start"] > pseudoautosoms_Y2[1])
+        )
+    ]
 
-    transcripts_x = transcripts_x['transcript_id'].unique()
-    transcripts_y = transcripts_y['transcript_id'].unique()
-
-    true_transcripts_x = true_transcripts_x['transcript_id'].unique()
-    true_transcripts_y = true_transcripts_y['transcript_id'].unique()
+    # transcripts_x = transcripts_x['transcript_id'].unique()
+    # transcripts_y = transcripts_y['transcript_id'].unique()
+    if drop_duplicates:
+        true_transcripts_x = true_transcripts_x["transcript_id"].unique()
+        true_transcripts_y = true_transcripts_y["transcript_id"].unique()
+    else:
+        true_transcripts_x = true_transcripts_x.index
+        true_transcripts_y = true_transcripts_y.index
 
     return true_transcripts_x, true_transcripts_y
 
 
-@task(log_prints=True, description='drop sex (chrX, chrY) transcripts from data')
-def split_by_sex_transcripts(adata: ad.AnnData) -> ad.AnnData:
-
-    transcripts_x, transcripts_y = locate_sex_transcripts(adata.var)
+@task(log_prints=True, description="drop sex (chrX, chrY) transcripts from data")
+def split_by_sex_transcripts(adata: ad.AnnData, drop_duplicates=True) -> ad.AnnData:
+    transcripts_x, transcripts_y = locate_sex_transcripts(adata.var, drop_duplicates)
 
     transcripts_x = transcripts_x.tolist()
     transcripts_y = transcripts_y.tolist()
@@ -136,7 +149,9 @@ def split_by_sex_transcripts(adata: ad.AnnData) -> ad.AnnData:
     transcripts_x = adata.var_names.intersection(transcripts_x)
     transcripts_y = adata.var_names.intersection(transcripts_y)
 
-    transcripts_autosomes = adata.var[(adata.var['seqname'] != "chrX") & (adata.var['seqname'] != "chrY")].index
+    transcripts_autosomes = adata.var[
+        (adata.var["seqname"] != "chrX") & (adata.var["seqname"] != "chrY")
+    ].index
 
     data_aXY = pd.Series(np.zeros(adata.n_vars, dtype=bool), index=adata.var_names)
     data_aX = pd.Series(np.zeros(adata.n_vars, dtype=bool), index=adata.var_names)
@@ -153,10 +168,10 @@ def split_by_sex_transcripts(adata: ad.AnnData) -> ad.AnnData:
     adata.varm["chr_aY"] = data_aY.values
     adata.varm["autosomes"] = data_autosomes.values
 
-    print('dataXY shape: ', adata.varm["chr_aXY"].shape)
-    print('dataX shape: ', adata.varm["chr_aX"].shape)
-    print('dataY shape: ', adata.varm["chr_aY"].shape)
-    print('data_autosome shape: ', adata.varm["autosomes"].shape)
+    print("dataXY shape: ", adata.varm["chr_aXY"].shape)
+    print("dataX shape: ", adata.varm["chr_aX"].shape)
+    print("dataY shape: ", adata.varm["chr_aY"].shape)
+    print("data_autosome shape: ", adata.varm["autosomes"].shape)
 
     return adata
 
@@ -179,16 +194,15 @@ def split_by_sex_transcripts(adata: ad.AnnData) -> ad.AnnData:
 
 @flow
 def make_train_dataset(organ="None", splitby=None):
-
-    value_to_predict = 'sex'
+    value_to_predict = "sex"
     # value_to_predict = value_to_predict.lower()
     # value_to_predict = 'Age'
 
     dataset_name = organ
     if organ == "None":
-        dataset_name = 'geuvadis'
+        dataset_name = "geuvadis"
 
-    adata = ad.read_h5ad(FDIR_INTEMEDIATE / f'{dataset_name.upper()}.raw.h5ad')
+    adata = ad.read_h5ad(FDIR_INTEMEDIATE / f"{dataset_name.upper()}.raw.h5ad")
 
     datasets = {}
     if splitby:
@@ -196,7 +210,7 @@ def make_train_dataset(organ="None", splitby=None):
         for category in categories:
             datasets[category] = adata.to_df()[adata.obs[splitby] == category]
     else:
-        datasets['RAW'] = adata.to_df()
+        datasets["RAW"] = adata.to_df()
 
     columns_ = pd.Index([])
 
@@ -205,9 +219,9 @@ def make_train_dataset(organ="None", splitby=None):
         data_ = filter_correlated(data_, adata.obs[value_to_predict].loc[data_.index])
         data_ = logarithmization(data_)
 
-        data_ = filter_cv_threshold(data_, 0.7)
+        # data_ = filter_cv_threshold(data_, 0.7)
         data_ = filter_median_q34(data_)
-        data_ = filter_cv_q34(data_)
+        # data_ = filter_cv_q34(data_)
 
         columns_ = columns_.union(data_.columns)
 
@@ -215,10 +229,14 @@ def make_train_dataset(organ="None", splitby=None):
     print(f"shape after filtration: {adata.shape=}")
 
     data = logarithmization(adata.to_df())
+
+    # CV together, median - separate
+    data = filter_cv_q34(data)
+
     data = data.astype(np.float32)
 
     adata = adata[data.index, data.columns]
-    adata.layers['raw'] = adata.X.copy()
+    adata.layers["raw"] = adata.X.copy()
     adata.X = data.values
 
     adata = split_by_sex_transcripts(adata)
@@ -236,15 +254,16 @@ def make_train_dataset(organ="None", splitby=None):
     # data_XY.to_hdf(fdir_processed / value_to_predict / f'{dataset_name}.preprocessed.{value_to_predict}.h5', key='chrXY', format='f')
 
     adata.write(
-        FDIR_PROCESSED / value_to_predict / f"{dataset_name.upper()}.preprocessed.{value_to_predict}.h5ad"
+        FDIR_PROCESSED
+        / value_to_predict
+        / f"{dataset_name.upper()}.preprocessed.{value_to_predict}.h5ad"
     )
 
 
 if __name__ == "__main__":
-
-    organ = 'None'
-    # organ = 'HEART'
+    # organ = 'None'
+    organ = "HEART"
     # organ = 'BRAIN0'
     # organ = 'BRAIN1'
 
-    make_train_dataset(organ=organ, splitby='sex')
+    make_train_dataset(organ=organ, splitby="sex")

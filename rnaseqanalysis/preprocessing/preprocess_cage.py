@@ -1,5 +1,4 @@
-""" Alternative to make_train_dataset.py but for CAGE dataset
-"""
+"""Alternative to make_train_dataset.py but for CAGE dataset"""
 
 import pandas as pd
 import numpy as np
@@ -7,21 +6,23 @@ from pathlib import Path
 import anndata as ad
 
 from tqdm import tqdm
+
 # from make_eval_dataset import logarithmization, filter_zero_median
-from make_train_dataset import (logarithmization,
-                                filter_zero_median,
-                                filter_cv_threshold,
-                                filter_median_q34,
-                                filter_correlated,
-                                filter_cv_q34,
-                                split_by_sex_transcripts)
+from make_train_dataset import (
+    logarithmization,
+    filter_zero_median,
+    filter_cv_threshold,
+    filter_median_q34,
+    filter_correlated,
+    filter_cv_q34,
+    split_by_sex_transcripts,
+)
 
 from config import FDIR_EXTERNAL, FDIR_INTEMEDIATE, FDIR_PROCESSED
 
 
 def parse_promoter_enchancer(adata: ad.AnnData) -> ad.AnnData:
-
-    transcript_class = adata.var['class']
+    transcript_class = adata.var["class"]
 
     new_column_names = []
     for i in range(len(data.columns)):
@@ -32,7 +33,6 @@ def parse_promoter_enchancer(adata: ad.AnnData) -> ad.AnnData:
 
 
 def drop_duplicates(data: pd.DataFrame) -> pd.DataFrame:
-
     duplicated_tr = data.columns[data.columns.duplicated()].unique()
 
     data_mean = data.mean()
@@ -49,8 +49,7 @@ def drop_duplicates(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def label_unique(data: ad.AnnData) -> ad.AnnData:
-
-    columns_wclass = adata.var['transcript_id'].astype(str) + "_" + adata.var['class'].astype(str)
+    columns_wclass = adata.var["transcript_id"].astype(str) + "_" + adata.var["class"].astype(str)
     duplicated = columns_wclass[columns_wclass.duplicated()]
     truely_unique = (~columns_wclass.duplicated()).values
 
@@ -66,17 +65,17 @@ def label_unique(data: ad.AnnData) -> ad.AnnData:
 
 
 for organ in ["HEART"]:
-    fdir = FDIR_EXTERNAL / organ / 'CAGE'
+    fdir = FDIR_EXTERNAL / organ / "CAGE"
 
 adata = ad.read_h5ad(FDIR_INTEMEDIATE / f"CAGE.{organ}.raw.h5ad")
 
 #! if no filtering
-adata.layers['raw'] = adata.X.copy()
+adata.layers["raw"] = adata.X.copy()
 adata.X = logarithmization(adata.to_df()).values
 
 
-adata.var['seqname'] = adata.var['seqnames']
-adata.var['transcript_id'] = adata.var.index
+adata.var["seqname"] = adata.var["seqnames"]
+adata.var["transcript_id"] = adata.var.index
 
 adata = label_unique(adata)
 
@@ -84,11 +83,11 @@ columns_new = [(col, str(i).zfill(5)) for i, col in enumerate(adata.var_names)]
 adata.var_names = [str(i).zfill(5) for i, col in enumerate(adata.var_names)]
 # genes_annot.index = [str(i).zfill(5) for i, col in enumerate(adata.var_names)]
 
-adata = split_by_sex_transcripts(adata)
+adata = split_by_sex_transcripts(adata, drop_duplicates=False)
 
 
 #! if filtering
-'''
+"""
 genes_annot['seqname'] = genes_annot['seqnames']
 genes_annot['transcript_id'] = genes_annot.index
 
@@ -111,11 +110,9 @@ data = data.astype(np.float32)
 
 # genes_annot = genes_annot.loc[data.columns]
 # samples_annot = samples_annot.loc[data.index]
-'''
+"""
 
-adata.write(
-    FDIR_PROCESSED / 'sex' / "CAGE.HEART.preprocessed.sex.h5ad"
-)
+adata.write(FDIR_PROCESSED / "sex" / "CAGE.HEART.preprocessed.sex.h5ad")
 
 # adata = ad.AnnData(X=data, obs=samples_annot, var=genes_annot)
 # adata.write(FDIR_EXTERNAL / organ / 'CAGE' / 'data.processed.h5ad')
