@@ -46,8 +46,8 @@ model_type = "xgboost"
 # model_type = 'random_forest'
 # model_type = 'knn'
 
-Scaler = StandardScaler
-# Scaler = RobustScaler
+# Scaler = StandardScaler
+Scaler = RobustScaler
 
 feature_importance_method = "native"
 feature_importance_method = "SHAP"
@@ -121,8 +121,8 @@ save_features = False
 
 drop_duplicates = False
 
-# for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
-for organ in ["CAGE.HEART"]:
+for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
+    # for organ in ["CAGE.HEART"]:
     # for organ in ["None"]:
     result_dict[organ] = {}
 

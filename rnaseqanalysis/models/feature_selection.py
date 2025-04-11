@@ -41,7 +41,7 @@ model_type = "xgboost"
 # model_type = "random_forest"
 
 Scaler = RobustScaler
-Scaler = StandardScaler
+# Scaler = StandardScaler
 
 # sex = 'chrXY'
 # sex = 'autosome'
@@ -58,7 +58,13 @@ organ_names = {
     "CAGE.HEART": "CAGE.HEART",
 }
 
-filename_prefixes = {"None": "geuvadis", "CAGE.HEART": "CAGE.HEART"}
+filename_prefixes = {
+    "None": "geuvadis",
+    "CAGE.HEART": "CAGE.HEART",
+    "BRAIN0": "BRAIN0",
+    "HEART": "HEART",
+    "BRAIN1": "BRAIN1",
+}
 
 
 n_threads = 6
@@ -69,9 +75,9 @@ value_to_predict = "sex"
 drop_duplicates = True
 drop_duplicates = False
 
-# for organ in ['BRAIN0', "HEART", "BRAIN1", 'None']:
-# for organ in ['None']:
-for organ in ["CAGE.HEART"]:
+for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
+    # for organ in ["BRAIN1"]:
+    # for organ in ["CAGE.HEART"]:
     # for sex_chromosome in ['chr_aXY']:
     for sex_chromosome in ["chr_aXY", "autosomes", "chr_aX", "chr_aY"]:
         with open(f"models/model_params.json", "r") as file:
