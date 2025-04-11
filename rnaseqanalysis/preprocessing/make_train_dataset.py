@@ -279,8 +279,8 @@ def make_train_dataset(organ="None", splitby=None):
 
 
 if __name__ == "__main__":
-    # organ = "None"
-    # make_train_dataset(organ=organ, splitby="sex")
+    organ = "None"
+    make_train_dataset(organ=organ, splitby="sex")
 
     # organ = "HEART"
     # organ = 'BRAIN0'

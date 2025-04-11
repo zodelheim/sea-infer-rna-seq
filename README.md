@@ -58,3 +58,8 @@ A short description of the project.
 
 --------
 
+RUN: 
+[convert raw to anndata files](rnaseqanalysis/preprocessing/convert_to_anndata.py)
+[create train dataset](rnaseqanalysis/preprocessing/make_train_dataset.py)
+[range features](rnaseqanalysis/models/feature_ranging.py)
+[boxplots feature/score](rnaseqanalysis/models/feature_selection.py)

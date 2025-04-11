@@ -117,13 +117,14 @@ def convert_brain1(
 
 
 if __name__ == "__main__":
-    cage_heart = read_cage_dataset(
-        FDIR_EXTERNAL / "HEART" / "CAGE" / "TPM batch corrected PLS ELS.txt",
-        FDIR_EXTERNAL / "HEART" / "CAGE" / "Metadata_ERytkin Edits10072024 age request.xlsx",
-        FDIR_EXTERNAL / "HEART" / "CAGE" / "ANNOT.csv",
-    )
-    cage_heart.write(FDIR_INTEMEDIATE / "CAGE.HEART.raw.h5ad")
+    # cage_heart = read_cage_dataset(
+    #     FDIR_EXTERNAL / "HEART" / "CAGE" / "TPM batch corrected PLS ELS.txt",
+    #     FDIR_EXTERNAL / "HEART" / "CAGE" / "Metadata_ERytkin Edits10072024 age request.xlsx",
+    #     FDIR_EXTERNAL / "HEART" / "CAGE" / "ANNOT.csv",
+    # )
+    # cage_heart.write(FDIR_INTEMEDIATE / "CAGE.HEART.raw.h5ad")
     # exit()
+
     geuvadis = read_dataset(
         FDIR_RAW / "Geuvadis.all.csv",
         FDIR_RAW / "Geuvadis.SraRunTable.txt",
