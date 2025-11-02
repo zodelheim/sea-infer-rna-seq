@@ -20,7 +20,9 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import StratifiedKFold, RepeatedStratifiedKFold
 from pathlib import Path
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, RocCurveDisplay, auc
-from sklearn.feature_selection import RFECV
+from sklearn.feature_selection import RFECV, VarianceThreshold
+from sklearn.linear_model import SGDClassifier
+
 import mlflow
 import shap
 import json
@@ -28,7 +30,7 @@ import cupy
 import anndata as ad
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from config import FDIR_EXTERNAL, FDIR_RAW, FDIR_PROCESSED, FDIR_INTEMEDIATE
-
+from loguru import logger
 
 from tqdm import tqdm
 
@@ -42,10 +44,8 @@ use_CV = True
 
 model_type = "catboost"
 model_type = "xgboost"
-# model_type = 'random_forest'
-
-Scaler = RobustScaler
-# Scaler = StandardScaler
+# model_type = "random_forest"
+# model_type = "logreg"
 
 # sex = 'chrXY'
 # sex = 'autosome'
@@ -70,30 +70,58 @@ drop_duplicates = False
 
 # value_to_predict = 'Experimental_Factor:_population (exp)'
 
-# for organ in ['BRAIN1']:
-for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
+logger.info(f"Model type {model_type}")
+
+with open("models/model_params.json", "r") as file:
+    model_params = json.load(file)[model_type]
+model_params = model_params[value_to_predict]
+
+if model_type == "xgboost":
+    model = xgb.XGBClassifier(**model_params)
+
+if model_type == "logreg":
+    model = SGDClassifier(**model_params)
+
+
+for organ in ["HEART"]:
+    # for organ in ["CAGE.HEART"]:
+    if organ in ["CAGE.HEART"]:
+        Scaler = StandardScaler
+    else:
+        Scaler = RobustScaler
+
+    logger.info(f"scaler: {Scaler}")
+
+    # for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
+    logger.info(f"Calculate {organ}")
     # for organ in ["CAGE.HEART"]:
     # for organ in ['None']:
-    # for sex_chromosome in ['chrXY']:
+    # for sex_chromosome in ["chr_aX"]:
     for sex_chromosome in ["chr_aXY", "autosomes", "chr_aX", "chr_aY"]:
-        with open(f"models/model_params.json", "r") as file:
-            model_params = json.load(file)[model_type]
-        model_params = model_params[value_to_predict]
+        models_statistics = []
+        logger.info(f"Chromosomes: {sex_chromosome}")
 
-        adata = ad.read_h5ad(
-            fdir_processed
-            / f"{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad"
-        )
+        if organ == "CAGE.HEART":
+            adata = ad.read_h5ad(
+                fdir_processed / f"CAGE.HEART.preprocessed.{value_to_predict}.h5ad"
+            )
+        else:
+            adata = ad.read_h5ad(fdir_processed / f"GEUVADIS.preprocessed.{value_to_predict}.h5ad")
+
         adata = adata[:, adata.varm[sex_chromosome]]
 
         if drop_duplicates:
             adata = adata[:, adata.varm["unique"]]
 
         if organ not in ["None", "CAGE.HEART"]:
-            fname = next((fdir_external / organ / "reg").glob("*processed.h5"))
-            fname = fname.name
+            # fname = next((fdir_external / organ / "reg").glob("*processed.h5"))
+            # fname = fname.name
 
-            data_eval = pd.read_hdf(fdir_external / organ / "reg" / fname, index_col=0)
+            # data_eval = pd.read_hdf(fdir_external / organ / "reg" / fname, index_col=0)
+
+            data_eval = ad.read_h5ad(
+                fdir_processed / f"{filename_prefixes[organ]}.preprocessed.{value_to_predict}.h5ad"
+            ).to_df()
             adata = adata[:, adata.var_names.intersection(data_eval.columns)]
         # --------------------------------------------------------------------------------
         X = adata.X
@@ -131,10 +159,8 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
             y_test = y[val]
 
             train_scaler = Scaler().fit(X_train)
-            test_scaler = Scaler().fit(X_test)
-
             X_train = train_scaler.transform(X_train)
-            X_test = test_scaler.transform(X_test)
+            X_test = train_scaler.transform(X_test)
 
             X_train_ = X_train
             y_train_ = y_train
@@ -142,14 +168,21 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
             y_val = y_test
 
             if model_type == "xgboost":
-                if y.max() > 1:
-                    model_params["objective"] = "multi:softmax"
-                    # model_params['num_class'] = y.max() + 1
+                # model_params['num_class'] = y.max() + 1
 
-                model = xgb.XGBClassifier(**model_params)
-                model.fit(cupy.array(X_train_), y_train_, eval_set=[(X_val, y_val)], verbose=False)
+                # model = xgb.XGBClassifier(**model_params)
+                model.fit(
+                    cupy.array(X_train_),
+                    y_train_,
+                    eval_set=[(X_val, y_val)],
+                    verbose=False,
+                )
 
                 X_test_c = cupy.array(X_test)
+
+            if model_type == "logreg":
+                model.fit(X_train_, y_train_)
+                X_test_c = X_test
 
             if model_type == "catboost":
                 model = CatBoostClassifier(**model_params)
@@ -171,6 +204,8 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
 
             pred = model.predict(X_test_c)
             pred_prob = model.predict_proba(X_test_c)
+
+            models_statistics.append(model.evals_result()["validation_0"]["logloss"])
 
             importances_native = model.feature_importances_
 
@@ -229,22 +264,22 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
             mean_precision = np.mean(precisions)
             mean_recall = np.mean(recalls)
 
-            print(sex_chromosome)
-            print("-" * 20)
-            print(f"{mean_auc=}")
-            print(f"{mean_accuracy=}")
-            print(f"{mean_f1=}")
-            print(f"{mean_precision=}")
-            print(f"{mean_recall=}")
-            print("-" * 20)
+            logger.info(sex_chromosome)
+            logger.info("-" * 20)
+            logger.info(f"{mean_auc=}")
+            logger.info(f"{mean_accuracy=}")
+            logger.info(f"{mean_f1=}")
+            logger.info(f"{mean_precision=}")
+            logger.info(f"{mean_recall=}")
+            logger.info("-" * 20)
 
         feature_importance_df = feature_importance_df.sort_values(by="SHAP", ascending=False)
-        print("features by SHAP")
-        print(feature_importance_df.iloc[:n_features_to_print])
+        logger.info("features by SHAP")
+        logger.info(feature_importance_df.iloc[:n_features_to_print])
 
         feature_importance_df = feature_importance_df.sort_values(by="native", ascending=False)
-        print("features by model.feature_importances_")
-        print(feature_importance_df.iloc[:n_features_to_print])
+        logger.info("features by model.feature_importances_")
+        logger.info(feature_importance_df.iloc[:n_features_to_print])
 
         # feature_importance_df.to_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv')
         feature_importance_df.to_hdf(
@@ -254,7 +289,10 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
             format="f",
         )
 
-        print("\n")
-        print(model_type)
-        print(model_params)
-        print("\n")
+        logger.info("\n")
+        logger.info(model_type)
+        logger.info(model_params)
+        logger.info("\n")
+
+        with open(Path("logs") / f"{organ}{sex_chromosome}_model_log.json", "w") as json_file:
+            json.dump(models_statistics, json_file, indent=4)

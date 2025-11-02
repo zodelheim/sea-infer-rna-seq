@@ -40,8 +40,6 @@ model_type = "catboost"
 model_type = "xgboost"
 # model_type = "random_forest"
 
-Scaler = RobustScaler
-# Scaler = StandardScaler
 
 # sex = 'chrXY'
 # sex = 'autosome'
@@ -75,20 +73,37 @@ value_to_predict = "sex"
 drop_duplicates = True
 drop_duplicates = False
 
-for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
+with open("models/model_params.json", "r") as file:
+    model_params = json.load(file)[model_type]
+model_params = model_params[value_to_predict]
+
+if model_type == "xgboost":
+    model = xgb.XGBClassifier(**model_params)
+
+
+# for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
+# for organ in ["CAGE.HEART"]:
+for organ in ["HEART"]:
+    if organ in ["CAGE.HEART"]:
+        Scaler = StandardScaler
+    else:
+        Scaler = RobustScaler
+
     # for organ in ["BRAIN1"]:
-    # for organ in ["CAGE.HEART"]:
-    # for sex_chromosome in ['chr_aXY']:
     for sex_chromosome in ["chr_aXY", "autosomes", "chr_aX", "chr_aY"]:
-        with open(f"models/model_params.json", "r") as file:
-            model_params = json.load(file)[model_type]
-        model_params = model_params[value_to_predict]
+        # for sex_chromosome in ["chr_aX"]:
+        # with open(f"models/model_params.json", "r") as file:
+        #     model_params = json.load(file)[model_type]
+        # model_params = model_params[value_to_predict]
 
         # print(model_params)
-        adata = ad.read_h5ad(
-            fdir_processed
-            / f"{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad"
-        )
+        if organ == "CAGE.HEART":
+            adata = ad.read_h5ad(
+                fdir_processed / f"CAGE.HEART.preprocessed.{value_to_predict}.h5ad"
+            )
+        else:
+            adata = ad.read_h5ad(fdir_processed / f"GEUVADIS.preprocessed.{value_to_predict}.h5ad")
+
         adata = adata[:, adata.varm[sex_chromosome]]
 
         if drop_duplicates:
@@ -103,10 +118,15 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
         features = feature_importance_df[feature_importance_method]
 
         if organ not in ["None", "CAGE.HEART"]:
-            fname = next((fdir_external / organ / "reg").glob("*processed.h5"))
-            fname = fname.name
+            # fname = next((fdir_external / organ / "reg").glob("*processed.h5"))
+            # fname = fname.name
 
-            data_eval = pd.read_hdf(fdir_external / organ / "reg" / fname, index_col=0)
+            # data_eval = pd.read_hdf(fdir_external / organ / "reg" / fname, index_col=0)
+
+            data_eval = ad.read_h5ad(
+                fdir_processed / f"{filename_prefixes[organ]}.preprocessed.{value_to_predict}.h5ad"
+            ).to_df()
+
             features = features.loc[features.index.intersection(data_eval.columns)]
 
         features = features.sort_values(ascending=False).index
@@ -151,8 +171,9 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
                 # test_size = 0.2
                 # random_state = 42
 
-                X_train = Scaler().fit_transform(X_train)
-                X_test = Scaler().fit_transform(X_test)
+                train_scaler = Scaler().fit(X_train)
+                X_train = train_scaler.transform(X_train)
+                X_test = train_scaler.transform(X_test)
 
                 # label_encoder = LabelEncoder().fit(y_train)
                 # y_train = label_encoder.transform(y_train)
@@ -173,11 +194,14 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
                 # with Live("models/log") as live:
                 if model_type == "xgboost":
                     # model_params["callbacks"] = [DVCLiveCallback()]
-                    model = xgb.XGBClassifier(**model_params)
-                    model.fit(
-                        cupy.array(X_train_), y_train_, eval_set=[(X_val, y_val)], verbose=False
-                    )
 
+                    # model = xgb.XGBClassifier(**model_params)
+                    model.fit(
+                        cupy.array(X_train_),
+                        y_train_,
+                        eval_set=[(X_val, y_val)],
+                        verbose=False,
+                    )
                     X_test_c = cupy.array(X_test)
 
                 if model_type == "catboost":

@@ -25,6 +25,7 @@ import json
 import cupy
 from tqdm import tqdm
 import anndata as ad
+from loguru import logger
 
 from sklearn.neighbors import KNeighborsClassifier
 from config import FDIR_EXTERNAL, FDIR_INTEMEDIATE, FDIR_PROCESSED, FDIR_RAW
@@ -46,8 +47,6 @@ model_type = "xgboost"
 # model_type = 'random_forest'
 # model_type = 'knn'
 
-# Scaler = StandardScaler
-Scaler = RobustScaler
 
 feature_importance_method = "native"
 feature_importance_method = "SHAP"
@@ -66,43 +65,30 @@ value_to_predict = "sex"
 result_dict = {}
 
 n_featues_dict = {
-    # 'BRAIN0': {
-    #     'chrXY': 10,
-    #     'chrX': 9,
-    #     'chrY': 80,
-    #     'autosome': 91,
-    # },
     "BRAIN0": {
-        "chr_aXY": 2,
-        "chr_aX": 6,
-        "chr_aY": 5,
-        "autosomes": 37,
-    },
-    "BRAIN1": {
-        "chr_aXY": 7,
-        "chr_aX": 5,
-        "chr_aY": 5,
-        "autosomes": 59,
+        "chr_aXY": 2,  # 1
+        "chr_aX": 1,  # 1
+        "chr_aY": 1,
+        "autosomes": 46,  # 40
     },
     "HEART": {
-        "chr_aXY": 9,
-        "chr_aX": 8,
-        "chr_aY": 93,
-        "autosomes": 82,
+        "chr_aXY": 3,  # 2
+        "chr_aX": 2,
+        "chr_aY": 1,
+        "autosomes": 22,  # 33
+    },
+    "BRAIN1": {
+        "chr_aXY": 2,  # 2
+        "chr_aX": 1,  # 2
+        "chr_aY": 1,
+        "autosomes": 29,  # 12
     },
     "None": {
-        "chr_aXY": 10,
-        "chr_aX": 10,
-        "chr_aY": 3,
-        "autosomes": 82,
+        "chr_aXY": 1,  # 2, #3
+        "chr_aX": 1,
+        "chr_aY": 1,
+        "autosomes": 40,  # 18
     },
-    # with filtered duplicates
-    # 'CAGE.HEART': {
-    #     'chr_aXY': 6,
-    #     'chr_aX': 27,
-    #     'chr_aY': 22,
-    #     'autosomes': 22,
-    # }
     "CAGE.HEART": {
         "chr_aXY": 6,  # 10
         "chr_aX": 9,
@@ -111,19 +97,38 @@ n_featues_dict = {
     },
 }
 
-filename_prefixes = {"None": "geuvadis", "CAGE.HEART": "CAGE.HEART"}
+filename_prefixes = {
+    "None": "geuvadis",
+    "CAGE.HEART": "CAGE.HEART",
+    "BRAIN0": "BRAIN0",
+    "HEART": "HEART",
+    "BRAIN1": "BRAIN1",
+}
 
 
 features_shapsumm_threshold = 45
 
+save_features = True
 save_results = True
-save_features = False
 
 drop_duplicates = False
 
-for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
+with open(f"models/model_params.json", "r") as file:
+    model_params = json.load(file)[model_type]
+model_params = model_params[value_to_predict]
+# model_params['max_depth'] = 7
+
+if model_type == "xgboost":
+    model = xgb.XGBClassifier(**model_params)
+
+for organ in ["None", "BRAIN0", "BRAIN1", "HEART"]:
     # for organ in ["CAGE.HEART"]:
-    # for organ in ["None"]:
+    # for organ in ["BRAIN1"]:
+    if organ in ["CAGE.HEART"]:
+        Scaler = StandardScaler
+    else:
+        Scaler = RobustScaler
+
     result_dict[organ] = {}
 
     fig_cm, axs_cm = plt.subplots(2, 2)
@@ -131,27 +136,26 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
     cbar_ax2 = fig_cm.add_axes([0.92, 0.25, 0.015, 0.6], in_layout=True)
 
     for sex_chromosome, ax_cm in zip(["chr_aXY", "chr_aX", "chr_aY", "autosomes"], axs_cm.flat):
-        # for sex in ['chrXY']:
+        # for sex_chromosome in ["chr_aX"]:
         result_dict[organ][sex_chromosome] = {}
 
-        print("*" * 20)
-        print(organ)
-        print(model_type)
-        print(sex_chromosome)
-        print("*" * 20)
+        logger.info("*" * 20)
+        logger.info(organ)
+        logger.info(model_type)
+        logger.info(sex_chromosome)
+        logger.info("*" * 20)
 
         # n_features = 0
-        n_features = n_featues_dict[organ][sex_chromosome]
+        # n_features = n_featues_dict[organ][sex_chromosome]
+        n_features = 50
 
-        with open(f"models/model_params.json", "r") as file:
-            model_params = json.load(file)[model_type]
-        model_params = model_params[value_to_predict]
-        # model_params['max_depth'] = 7
+        if organ in ["CAGE.HEART"]:
+            adata = ad.read_h5ad(
+                fdir_processed / f"CAGE.HEART.preprocessed.{value_to_predict}.h5ad"
+            )
+        else:
+            adata = ad.read_h5ad(fdir_processed / f"GEUVADIS.preprocessed.{value_to_predict}.h5ad")
 
-        adata = ad.read_h5ad(
-            fdir_processed
-            / f"{filename_prefixes[organ].upper()}.preprocessed.{value_to_predict}.h5ad"
-        )
         adata = adata[:, adata.varm[sex_chromosome]]
 
         if drop_duplicates:
@@ -167,17 +171,22 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
         features = features.sort_values(ascending=False)
 
         if organ not in ["None", "CAGE.HEART"]:
-            fname = next((fdir_external / organ / "reg").glob("*processed.h5"))
-            fname = fname.name
+            #! RAW DATA
+            # fname = next((fdir_external / organ / "reg").glob("*processed.h5"))
+            # fname = fname.name
+            # data_eval = pd.read_hdf(fdir_external / organ / "reg" / fname, index_col=0)
+            #! PREPROCESSED DATA
+            data_eval = ad.read_h5ad(
+                fdir_processed / f"{filename_prefixes[organ]}.preprocessed.{value_to_predict}.h5ad"
+            ).to_df()
 
-            data_eval = pd.read_hdf(fdir_external / organ / "reg" / fname, index_col=0)
             features = features.loc[features.index.intersection(data_eval.columns)]
 
             if n_features != 0:
                 features = features.sort_values(ascending=False)
-                # print(features.iloc[:n_features])
+                # logger.info(features.iloc[:n_features])
             else:
-                print(features.shape)
+                logger.info(features.shape)
 
         features_fname = (
             f"{filename_prefixes[organ]}_train_features_{sex_chromosome}_calibration_{organ}.csv"
@@ -193,7 +202,14 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
                 features_list.set_index("Feature", inplace=True)
         else:
             features_list = features.loc[features >= features_shapsumm_threshold]
-            n_features = len(features_list)
+
+            #! CHECK: use by threshold
+            # n_features = len(features_list)
+            #! CHECK: OR use max of!!!
+            n_features = max(len(features_list), n_featues_dict[organ][sex_chromosome])
+
+            features_list = features.iloc[:n_features]
+        logger.info(f"{n_features=}")
 
         if save_features:
             features_list.to_csv(ml_models_fdir / model_type / features_fname)
@@ -217,9 +233,9 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
         random_state = 42
 
         label_encoder = LabelEncoder().fit(y)
-        print(label_encoder.classes_, "[0, 1]")
+        logger.info(f"{label_encoder.classes_}, [0, 1]")
 
-        # print(dir(label_encoder))
+        # logger.info(dir(label_encoder))
         # exit()
         y = label_encoder.transform(y)
 
@@ -247,10 +263,8 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
             y_test = y[val]
 
             train_scaler = Scaler().fit(X_train)
-            test_scaler = Scaler().fit(X_test)
-
             X_train = train_scaler.transform(X_train)
-            X_test = test_scaler.transform(X_test)
+            X_test = train_scaler.transform(X_test)
 
             X_train_ = X_train
             y_train_ = y_train
@@ -258,7 +272,7 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
             y_val = y_test
 
             if model_type == "xgboost":
-                model = xgb.XGBClassifier(**model_params)
+                # model = xgb.XGBClassifier(**model_params)
                 model.fit(cupy.array(X_train_), y_train_, eval_set=[(X_val, y_val)], verbose=False)
 
             if model_type == "catboost":
@@ -317,14 +331,14 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
         mean_precision = np.mean(precisions)
         mean_recall = np.mean(recalls)
 
-        print("-" * 20)
-        print("-" * 20)
-        print(f"{mean_auc=},")
-        print(f"{mean_accuracy=},")
-        print(f"{mean_f1=},")
-        print(f"{mean_precision=},")
-        print(f"{mean_recall=},")
-        print("-" * 20)
+        logger.info("-" * 20)
+        logger.info("-" * 20)
+        logger.info(f"{mean_auc=},")
+        logger.info(f"{mean_accuracy=},")
+        logger.info(f"{mean_f1=},")
+        logger.info(f"{mean_precision=},")
+        logger.info(f"{mean_recall=},")
+        logger.info("-" * 20)
 
         total_auc = roc_auc_score(y, preds_proba)
         total_accuracy = accuracy_score(y, preds)
@@ -332,12 +346,12 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
         total_precision = precision_score(y, preds)
         total_recall = recall_score(y, preds)
 
-        print(f"{total_auc=},")
-        print(f"{total_accuracy=},")
-        print(f"{total_f1=},")
-        print(f"{total_precision=},")
-        print(f"{total_recall=},")
-        print("-" * 20)
+        logger.info(f"{total_auc=},")
+        logger.info(f"{total_accuracy=},")
+        logger.info(f"{total_f1=},")
+        logger.info(f"{total_precision=},")
+        logger.info(f"{total_recall=},")
+        logger.info("-" * 20)
 
         result_dict[organ][sex_chromosome]["mean_auc"] = total_auc
         result_dict[organ][sex_chromosome]["mean_accuracy"] = total_accuracy
@@ -353,15 +367,16 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
             lw=2,
             alpha=0.8,
         )
-        plt.title(f"{model_type}, {sex_chromosome}, {organ}")
+        # plt.title(f"{model_type}, {sex_chromosome}, {organ}")
+        ax.set_title(f"{model_type}, {sex_chromosome}, {organ}")
         if save_results:
-            plt.savefig(
+            fig.savefig(
                 f"reports/figures/{filename_prefixes[organ]}_{sex_chromosome}_organ_{organ}_ROC.png",
                 dpi=300,
             )
             plt.close()
         else:
-            plt.show()
+            fig.show()
 
         # if save_results:
         # _ = ConfusionMatrixDisplay.from_predictions(y, preds, display_labels=['F', "M"])
@@ -395,12 +410,12 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
             ax=ax_cm,
             square=True,
             vmin=0,
-            vmax=len(y),
+            vmax=y.shape[0],
             fmt="",
             mask=~mask_diag,
             cbar_kws={"orientation": "vertical", "format": "%1i"},
-            cbar_ax=cbar_ax1 if sex_chromosome == "chrXY" else None,
-            cbar=sex_chromosome == "chrXY",
+            cbar_ax=cbar_ax1 if sex_chromosome == "chr_aXY" else None,
+            cbar=sex_chromosome == "chr_aXY",
             annot_kws=dict(ha="center"),
         )
         sns.heatmap(
@@ -410,12 +425,12 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
             ax=ax_cm,
             square=True,
             vmin=0,
-            vmax=len(y),
+            vmax=y.shape[0],
             fmt="",
             mask=mask_diag,
             cbar_kws={"orientation": "vertical", "format": "%1i"},
-            cbar_ax=cbar_ax2 if sex_chromosome == "chrXY" else None,
-            cbar=sex_chromosome == "chrXY",
+            cbar_ax=cbar_ax2 if sex_chromosome == "chr_aXY" else None,
+            cbar=sex_chromosome == "chr_aXY",
             annot_kws=dict(ha="center"),
         )
         ax_cm.set_xlabel("Predicted label")
@@ -428,12 +443,15 @@ for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
 
     fig_cm.tight_layout(rect=(0, 0, 0.87, 1))
     if save_results:
-        plt.savefig(f"reports/figures/{filename_prefixes[organ]}_cm_{organ}.png", dpi=300)
+        fig_cm.savefig(f"reports/figures/geuvadis_cm_{organ}.png", dpi=300)
         plt.close()
     else:
-        plt.show()
+        fig_cm.show()
 
 
 if save_results:
     with open(f"reports/train_result_{value_to_predict}_{model_type}.json", "w") as file:
         json.dump(result_dict, file)
+else:
+    print("RESULT:")
+    print(result_dict)

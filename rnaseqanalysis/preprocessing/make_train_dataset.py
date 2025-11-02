@@ -14,7 +14,7 @@ from loguru import logger
 from config import FDIR_EXTERNAL, FDIR_RAW, FDIR_PROCESSED, FDIR_INTEMEDIATE
 
 
-@task(log_prints=True, description="drop zero median transcripts")
+# @task(log_prints=True, description="drop zero median transcripts")
 def filter_zero_median(df: pd.DataFrame) -> pd.DataFrame:
     df_median = df.median()
     if (df_median == 0).any():
@@ -23,16 +23,16 @@ def filter_zero_median(df: pd.DataFrame) -> pd.DataFrame:
         #       " features will be removed, due to a zero median value")
         df = df.drop(columns=cols_to_drop)
         # print("Current dataset size: ", df.shape)
-        print("Dataset shape: ", df.shape)
+        logger.info(f"Dataset shape: {df.shape}")
         return df
 
     # print("Zero median columns aren't found")
-    print("Dataset shape: ", df.shape)
+    logger.info(f"Dataset shape: {df.shape}")
 
     return df
 
 
-@task(log_prints=True, description="drop correlated transcripts")
+# @task(log_prints=True, description="drop correlated transcripts")
 def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.8) -> pd.DataFrame:
     X_corr = X
     y_corr = y
@@ -50,17 +50,17 @@ def filter_correlated(X: pd.DataFrame, y: pd.DataFrame | pd.Series, threshold=0.
             columns_to_drop.append(c)
 
     X = X.drop(columns=columns_to_drop)
-    print("Dataset shape: ", X.shape)
+    logger.info(f"Dataset shape: {X.shape}")
     return X
 
 
-@task(log_prints=True, description="logarithmization (log2(x+1))")
+# @task(log_prints=True, description="logarithmization (log2(x+1))")
 def logarithmization(df: pd.DataFrame):
     df = np.log2(df + 1)
     return df
 
 
-@task(log_prints=True, description="drop transcripts with cv < threshold")
+# @task(log_prints=True, description="drop transcripts with cv < threshold")
 def filter_cv_threshold(df: pd.DataFrame, threshold: float):
     cv = df.std() / df.mean()
     low_cv_cols = cv[cv < threshold].index
@@ -72,29 +72,29 @@ def filter_cv_threshold(df: pd.DataFrame, threshold: float):
     #     print("No features found with coefficient of variation below the threshold.")
     # print(f"Current amount of features is {len(df.columns)}")
 
-    print("Dataset shape: ", df.shape)
+    logger.info(f"Dataset shape: {df.shape}")
     return df
 
 
-@task(log_prints=True, description="filter transcripts with mean < median")
+# @task(log_prints=True, description="filter transcripts with mean < median")
 def filter_median_q34(data: pd.DataFrame):
     mean = data.mean(axis=0)
     median = mean.median()
     data = data.loc[:, mean > median]
-    print("Dataset shape: ", data.shape)
+    logger.info(f"Dataset shape: {data.shape}")
     return data
 
 
-@task(log_prints=True, description="filter transcripts with cv mean < cv median")
+# @task(log_prints=True, description="filter transcripts with cv mean < cv median")
 def filter_cv_q34(data: pd.DataFrame):
     cv = data.std() / data.mean()
     median_cv = cv.median()
     data = data.loc[:, cv > median_cv]
-    print("Dataset shape: ", data.shape)
+    logger.info(f"Dataset shape: {data.shape}")
     return data
 
 
-@task(log_prints=True, description="extract Sex (chrX, chrY) transcripts from gtf")
+# @task(log_prints=True, description="extract Sex (chrX, chrY) transcripts from gtf")
 def locate_sex_transcripts(gtf_data: pd.DataFrame, drop_duplicates) -> tuple[pd.Series, pd.Series]:
     # from https://www.ensembl.org/info/genome/genebuild/human_PARS.html
 
@@ -140,7 +140,7 @@ def locate_sex_transcripts(gtf_data: pd.DataFrame, drop_duplicates) -> tuple[pd.
     return true_transcripts_x, true_transcripts_y
 
 
-@task(log_prints=True, description="drop sex (chrX, chrY) transcripts from data")
+# @task(log_prints=True, description="drop sex (chrX, chrY) transcripts from data")
 def split_by_sex_transcripts(adata: ad.AnnData, drop_duplicates=True) -> ad.AnnData:
     transcripts_x, transcripts_y = locate_sex_transcripts(adata.var, drop_duplicates)
 
@@ -169,10 +169,10 @@ def split_by_sex_transcripts(adata: ad.AnnData, drop_duplicates=True) -> ad.AnnD
     adata.varm["chr_aY"] = data_aY.values
     adata.varm["autosomes"] = data_autosomes.values
 
-    print("dataXY shape: ", adata.varm["chr_aXY"].shape)
-    print("dataX shape: ", adata.varm["chr_aX"].shape)
-    print("dataY shape: ", adata.varm["chr_aY"].shape)
-    print("data_autosome shape: ", adata.varm["autosomes"].shape)
+    logger.info(f"dataXY shape: {adata.varm['chr_aXY'].shape}")
+    logger.info(f"dataX shape: {adata.varm['chr_aX'].shape}")
+    logger.info(f"dataY shape: {adata.varm['chr_aY'].shape}")
+    logger.info(f"data_autosome shape: {adata.varm['autosomes'].shape}")
 
     return adata
 
@@ -193,7 +193,7 @@ def split_by_sex_transcripts(adata: ad.AnnData, drop_duplicates=True) -> ad.AnnD
     # data.to_csv(fdir_traintest / 'sex' / 'geuvadis.preprocessed.chrXY.csv')
 
 
-@flow
+# @flow
 def make_train_dataset(organ="None", splitby=None):
     value_to_predict = "sex"
     # value_to_predict = value_to_predict.lower()
@@ -245,6 +245,9 @@ def make_train_dataset(organ="None", splitby=None):
     logger.info(f"{dataset_name} logarithmized")
     data = logarithmization(adata.to_df())
 
+    logger.info(f"{dataset_name} filter_cv_threshold")
+    # data = filter_cv_threshold(data, 0.7)
+
     # CV together, median - separate
     if dataset_name == "geuvadis":
         logger.info(f"{dataset_name} logarithmized")
@@ -277,13 +280,13 @@ def make_train_dataset(organ="None", splitby=None):
         / f"{dataset_name.upper()}.preprocessed.{value_to_predict}.h5ad"
     )
 
+    logger.info("-" * 50)
+
 
 if __name__ == "__main__":
-    organ = "None"
-    make_train_dataset(organ=organ, splitby="sex")
+    # organ = "None"
+    # make_train_dataset(organ=organ, splitby="sex")
 
-    # organ = "HEART"
-    # organ = 'BRAIN0'
-    # organ = 'BRAIN1'
-    for organ in ["HEART", "BRAIN0", "BRAIN1"]:
+    # for organ in ["HEART", "BRAIN0", "BRAIN1"]:
+    for organ in ["HEART"]:
         make_train_dataset(organ=organ)

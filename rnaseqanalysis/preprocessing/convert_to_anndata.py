@@ -125,21 +125,23 @@ if __name__ == "__main__":
     # cage_heart.write(FDIR_INTEMEDIATE / "CAGE.HEART.raw.h5ad")
     # exit()
 
-    geuvadis = read_dataset(
-        FDIR_RAW / "Geuvadis.all.csv",
-        FDIR_RAW / "Geuvadis.SraRunTable.txt",
-        FDIR_RAW / "all_transcripts_strigtie_merged.gtf",
-    )
-    geuvadis.obs["sex"] = geuvadis.obs["Sex"]
-    geuvadis.obs.drop(columns=["Sex"], inplace=True)
-    geuvadis.write(FDIR_INTEMEDIATE / "GEUVADIS.raw.h5ad")
+    # geuvadis = read_dataset(
+    #     FDIR_RAW / "Geuvadis.all.csv",
+    #     FDIR_RAW / "Geuvadis.SraRunTable.txt",
+    #     FDIR_RAW / "all_transcripts_strigtie_merged.gtf",
+    # )
+    # geuvadis.obs["sex"] = geuvadis.obs["Sex"]
+    # geuvadis.obs.drop(columns=["Sex"], inplace=True)
+    # geuvadis.write(FDIR_INTEMEDIATE / "GEUVADIS.raw.h5ad")
 
-    fname = next((FDIR_EXTERNAL / "HEART" / "reg").glob("*TPM.txt"))
+    # fname = next((FDIR_EXTERNAL / "HEART" / "reg").glob("*TPM.txt"))
+    fname = "merged_heart_tpm.txt"
     heart = read_dataset(
         FDIR_EXTERNAL / "HEART" / "reg" / fname,
         FDIR_EXTERNAL / "HEART" / "reg" / "SraRunTable.txt",
         FDIR_RAW / "all_transcripts_strigtie_merged.gtf",
-        separator="\t",
+        # separator="\t",
+        separator=" ",
     )
     heart.write(FDIR_INTEMEDIATE / "HEART.raw.h5ad")
 
