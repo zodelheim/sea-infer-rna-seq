@@ -19,11 +19,11 @@
         "sex": {
             "n_jobs": 6,
             "objective": "binary:logistic",
-            "n_estimators": 500,
+            "n_estimators": 1000,
             "device": "cuda",
-            "eta": 0.05,
-            "gamma": 1e-06,
-            "max_depth": 3
+            "max_depth": 3,
+            "learning_rate": 0.01,
+            "early_stopping_rounds": 20
         },
         "population": {
             "n_jobs": 6,
@@ -33,6 +33,11 @@
             "eta": 0.05,
             "gamma": 1e-06,
             "max_depth": 3
+        }
+    },
+    "logreg": {
+        "sex": {
+            "loss": "log_loss"
         }
     }
 }
