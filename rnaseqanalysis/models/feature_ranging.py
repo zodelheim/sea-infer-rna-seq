@@ -23,10 +23,11 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, RocCurveDi
 from sklearn.feature_selection import RFECV, VarianceThreshold
 from sklearn.linear_model import SGDClassifier
 
-import mlflow
+# import mlflowf
 import shap
 import json
-import cupy
+
+# import cupy
 import anndata as ad
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from config import FDIR_EXTERNAL, FDIR_RAW, FDIR_PROCESSED, FDIR_INTEMEDIATE
@@ -83,7 +84,8 @@ if model_type == "logreg":
     model = SGDClassifier(**model_params)
 
 
-for organ in ["HEART"]:
+# for organ in ["HEART"]:
+for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
     # for organ in ["CAGE.HEART"]:
     if organ in ["CAGE.HEART"]:
         Scaler = StandardScaler
@@ -92,7 +94,6 @@ for organ in ["HEART"]:
 
     logger.info(f"scaler: {Scaler}")
 
-    # for organ in ["BRAIN0", "HEART", "BRAIN1", "None"]:
     logger.info(f"Calculate {organ}")
     # for organ in ["CAGE.HEART"]:
     # for organ in ['None']:
@@ -172,13 +173,13 @@ for organ in ["HEART"]:
 
                 # model = xgb.XGBClassifier(**model_params)
                 model.fit(
-                    cupy.array(X_train_),
+                    np.array(X_train_),
                     y_train_,
                     eval_set=[(X_val, y_val)],
                     verbose=False,
                 )
 
-                X_test_c = cupy.array(X_test)
+                X_test_c = np.array(X_test)
 
             if model_type == "logreg":
                 model.fit(X_train_, y_train_)
