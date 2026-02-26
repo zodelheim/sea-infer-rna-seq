@@ -284,9 +284,9 @@ def make_train_dataset(organ="None", splitby=None):
 
 
 if __name__ == "__main__":
-    # organ = "None"
-    # make_train_dataset(organ=organ, splitby="sex")
+    organ = "None"
+    make_train_dataset(organ=organ, splitby="sex")
 
     # for organ in ["HEART", "BRAIN0", "BRAIN1"]:
-    for organ in ["HEART"]:
-        make_train_dataset(organ=organ)
+    # for organ in ["HEART"]:
+    #     make_train_dataset(organ=organ)
