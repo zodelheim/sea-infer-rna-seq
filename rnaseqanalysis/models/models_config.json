@@ -1,0 +1,32 @@
+{
+    "random_forest": {
+        "sex": {},
+        "population": {}
+    },
+    "knn": {
+        "n_neighbors": 12,
+        "algorithm": "ball_tree"
+    },
+    "catboost": {
+        "loss_function": "Logloss",
+        "od_pval": 0.05,
+        "thread_count": 12,
+        "task_type": "GPU",
+        "iterations": 500,
+        "learning_rate": 0.03
+    },
+    "xgboost": {
+        "n_jobs": 6,
+        "objective": "binary:logistic",
+        "n_estimators": 1000,
+        "device": "cuda",
+        "max_depth": 3,
+        "learning_rate": 0.01,
+        "early_stopping_rounds": 20
+    },
+    "logreg": {
+        "sex": {
+            "loss": "log_loss"
+        }
+    }
+}
