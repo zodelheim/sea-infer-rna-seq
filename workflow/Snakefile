@@ -1,0 +1,11 @@
+configfile: "config.yaml"
+
+rule preprocess_geuvadis:
+    input: 
+        counts=config['datasets']['path'] + "/" + config['datasets']['counts_file']
+        metadata=config['datasets']['metadata_file']
+        annotation=config['datasets']["annotation_file"]
+    output: 
+        config['paths']['workdir'] + "/interim"
+    run:
+        "./.venv/bin/python3 ./scripts/01-convert_to_anndata.py --config {configfile} --exp_id {'001'}"
