@@ -1,0 +1,33 @@
+internal_paths:
+  processed_path: ./data/processed
+
+  interim_path: ./data/interim
+  external_path: ./data/external
+
+  models: ./models
+  results: ./resutls
+
+datasets:
+  - name: GEUVADIS
+    path: "/mnt/89ea702f-c213-4e9a-acb8-8c72a41b672e/Documents/PYTHON/RNASeqAnalysis/data/raw"
+    counts_file: "Geuvadis.all.csv"
+    metadata_file: "Geuvadis.SraRunTable.txt"
+    annotation_file: "/mnt/89ea702f-c213-4e9a-acb8-8c72a41b672e/Documents/PYTHON/RNASeqAnalysis/data/raw/all_transcripts_strigtie_merged.gtf"
+
+  - name: HEART
+    path: /mnt/89ea702f-c213-4e9a-acb8-8c72a41b672e/Documents/PYTHON/RNASeqAnalysis/data/external/HEART/reg
+    counts_file: "merged_heart_tpm.txt"
+    metadata_file: "SraRunTable.txt"
+    annotation_file: "/mnt/89ea702f-c213-4e9a-acb8-8c72a41b672e/Documents/PYTHON/RNASeqAnalysis/data/raw/all_transcripts_strigtie_merged.gtf"
+
+  - name: BRAIN0
+    path: "/mnt/89ea702f-c213-4e9a-acb8-8c72a41b672e/Documents/PYTHON/RNASeqAnalysis/data/external/BRAIN0/reg"
+    counts_file: brain0.TPM.csv,
+    metadata_file: "SraRunTable.txt"
+    annotation_file: "/mnt/89ea702f-c213-4e9a-acb8-8c72a41b672e/Documents/PYTHON/RNASeqAnalysis/data/raw/all_transcripts_strigtie_merged.gtf"
+
+  - name: BRAIN1
+    path: /mnt/89ea702f-c213-4e9a-acb8-8c72a41b672e/Documents/PYTHON/RNASeqAnalysis/data/external/BRAIN1/reg
+    counts_file: fname,
+    metadata_file: "SraRunTable.txt"
+    annotation_file: "/mnt/89ea702f-c213-4e9a-acb8-8c72a41b672e/Documents/PYTHON/RNASeqAnalysis/data/raw/all_transcripts_strigtie_merged.gtf"
