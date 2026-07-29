@@ -29,8 +29,8 @@ Pipeline is following:
 
 - [convert_to_anndata.py](rnaseqanalysis/preprocessing/convert_to_anndata.py) to convert all raw data to unified [anndata](https://anndata.readthedocs.io/en/latest/) format
 - [make_train_dataset.py](rnaseqanalysis/preprocessing/make_train_dataset.py) to create train dataset based on geuvadis data
-[feature_ranging.py](rnaseqanalysis/models/feature_ranging.py) - for transcripts ranging based on [SHAP](https://shap.readthedocs.io/en/latest/) index
-[feature_selection.py](rnaseqanalysis/models/feature_selection.py) - plot boxplot for manual N features selection
+- [feature_ranging.py](rnaseqanalysis/models/feature_ranging.py) - for transcripts ranging based on [SHAP](https://shap.readthedocs.io/en/latest/) index
+- [feature_selection.py](rnaseqanalysis/models/feature_selection.py) - plot boxplot for manual N features selection
 
 
 ## Project Organization
