@@ -17,7 +17,6 @@ logger.add(
 
 
 console = Console()
-logs_dir = Path("./logs")
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--config", default="config.yaml")
@@ -26,6 +25,7 @@ args = parser.parse_args()
 
 cfg = Config(**load_yaml(args.config))
 cfg_dict = cfg.model_dump()
+logs_dir = cfg.paths.logs
 
 logs_dir = logs_dir / args.exp_id
 logs_dir.mkdir(exist_ok=True)
@@ -36,6 +36,9 @@ console.log("Using following dataset paths:")
 console.log(cfg.datasets)
 
 for name in cfg.datasets:
+    if (cfg.paths.interim_path / f"{name}.raw.h5ad").is_file():
+        logger.warning(f"{cfg.paths.interim_path / f'{name}.raw.h5ad'} exists! Skipping...")
+        continue
     console.rule(f"Preprocessing [bold red]{name}[/bold red] dataset")
     converter = BaseConverter(cfg.datasets[name])
     anndata = converter.run()
