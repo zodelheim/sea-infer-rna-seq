@@ -3,6 +3,7 @@ paths:
   models: ./models
   results: ./resutls
   logs: ./logs
+  figures: ./figures
 
 datasets:
   GEUVADIS:
@@ -44,3 +45,4 @@ model_params:
   feature_importance_method: "SHAP"
   use_CV: True
   config_file: "./rnaseqanalysis/models/models_config.json"
+  feature_selection_method: top50
