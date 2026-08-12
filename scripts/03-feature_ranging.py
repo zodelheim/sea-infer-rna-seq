@@ -1,10 +1,7 @@
 import argparse
 import json
-from pathlib import Path
 
-# import cupy
 import anndata as ad
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import shap
@@ -26,6 +23,15 @@ from sklearn.metrics import (
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.preprocessing import LabelEncoder, RobustScaler
 from utils.errors import *
+
+try:
+    import cupy as cp
+
+    _USE_GPU = True
+
+except ModuleNotFoundError:
+    _USE_GPU = False
+
 
 models_lookup = {"xgboost": xgb.XGBClassifier, "catboost": CatBoostClassifier}
 
@@ -57,12 +63,14 @@ with open(cfg.model_params.config_file, "r") as file:
     else:
         model_params = config[cfg.model_params.model_type]
 
-
 model = models_lookup[cfg.model_params.model_type](**model_params)
 Scaler = RobustScaler
+KFoldType = RepeatedStratifiedKFold
+
 drop_duplicates = False
 
 logger.info(f"Scaler: {Scaler}")
+logger.info(f"KFoldType: {KFoldType}")
 logger.info(f"Model: {models_lookup[cfg.model_params.model_type]}")
 logger.info(f"Config: {model_params}")
 
@@ -74,7 +82,16 @@ train_adata = ad.read_h5ad(
 )
 
 for name in cfg.datasets:
-    logger.info(f"Compute feature importance for {name}")
+    logger.info(
+        f"Compute importances for features in TRAIN:{cfg.models.train_dataset} and TEST:{name} datasets"
+    )
+
+    ofname = f"feature_importance.{cfg.model_params.model_type}.{value_to_predict}.{cfg.models.train_dataset.upper()}.{name}.h5"
+
+    if (cfg.paths.interim_path / ofname).is_file():
+        logger.warning(f"File {cfg.paths.interim_path / ofname} exists! Skipping...")
+        continue
+
     for sex_chromosome in ["chr_aXY", "autosomes", "chr_aX", "chr_aY"]:
         models_statistics = []
         adata = train_adata[:, train_adata.varm[sex_chromosome]].copy()
@@ -104,7 +121,7 @@ for name in cfg.datasets:
         n_features_is_subset = 100
         n_features_to_print = 30
 
-        cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=10)
+        cv = KFoldType(n_splits=5, n_repeats=10)
         mean_fpr = np.linspace(0, 1, 100)
         tprs = []
         accuracies = []
@@ -112,7 +129,6 @@ for name in cfg.datasets:
         precisions = []
         recalls = []
 
-        fig, ax = plt.subplots(figsize=(6, 6))
         for train, val in track(
             cv.split(X, y),
             total=cv.get_n_splits(X, y),
@@ -129,19 +145,34 @@ for name in cfg.datasets:
 
             X_train_ = X_train
             y_train_ = y_train
-            X_val = X_test
-            y_val = y_test
+
+            if _USE_GPU:
+                X_train_ = cp.array(X_train_)
+                y_train_ = cp.array(y_train_)
+                X_test = cp.array(X_test)
+                y_test = cp.array(y_test)
+                X_val = X_test
+                y_val = y_test
+
+            else:
+                X_train_ = np.array(X_train_)
+                y_train_ = np.array(y_train_)
+                X_test = np.array(X_test)
+                y_test = np.array(y_test)
+                X_val = X_test
+                y_val = y_test
 
             if cfg.model_params.model_type == "xgboost":
                 model.fit(
-                    np.array(X_train_),
+                    X_train_,
                     y_train_,
                     eval_set=[(X_val, y_val)],
                     verbose=False,
                 )
+                X_test_c = X_test
 
-                X_test_c = np.array(X_test)
-
+            else:
+                raise NotImplementedError()
             pred = model.predict(X_test_c)
             pred_prob = model.predict_proba(X_test_c)
             models_statistics.append(model.evals_result()["validation_0"]["logloss"])
@@ -191,6 +222,7 @@ for name in cfg.datasets:
                 f1.append(f1_score(y_test, pred))
                 precisions.append(precision_score(y_test, pred))
                 recalls.append(recall_score(y_test, pred))
+
         if len(class_names) == 1:
             mean_tpr = np.mean(tprs, axis=0)
             mean_tpr[-1] = 1.0
@@ -211,23 +243,27 @@ for name in cfg.datasets:
             logger.info("-" * 20)
 
         feature_importance_df = feature_importance_df.sort_values(by="SHAP", ascending=False)
-        logger.info("features by SHAP")
+        logger.info(f"Top {n_features_to_print} features by SHAP")
         logger.info(feature_importance_df.iloc[:n_features_to_print])
 
         feature_importance_df = feature_importance_df.sort_values(by="native", ascending=False)
-        logger.info("features by model.feature_importances_")
+        logger.info(f"Top {n_features_to_print} features by model.feature_importances_")
         logger.info(feature_importance_df.iloc[:n_features_to_print])
 
         # feature_importance_df.to_csv(fdir_processed / f'feature_importance.{model_type}.{sex}.csv')
         feature_importance_df.to_hdf(
-            cfg.paths.interim_path
-            / f"feature_importance.{cfg.model_params.model_type}.{value_to_predict}.dataset_{cfg.models.train_dataset.upper()}.h5",
+            cfg.paths.interim_path / ofname,
             key=f"{sex_chromosome}",
             format="f",
         )
+
+        logger.info(f"Saved to {cfg.paths.interim_path / ofname}")
+        logger.info(f"Key={sex_chromosome}")
 
         with open(
             cfg.paths.logs / f"{cfg.models.train_dataset.upper()}{sex_chromosome}_model_log.json",
             "w",
         ) as json_file:
             json.dump(models_statistics, json_file, indent=4)
+
+    logger.info(f"Saved to {cfg.paths.interim_path / ofname}")
