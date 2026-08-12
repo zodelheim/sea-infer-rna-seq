@@ -184,3 +184,4 @@ reports/for_paper/*.pdf
 
 data/*
 .vscode/*
+logs/*
