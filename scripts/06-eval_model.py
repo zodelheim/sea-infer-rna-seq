@@ -185,6 +185,7 @@ for name in cfg.datasets:
         mean_r2 = np.mean(r2_scores)
         mean_spearman = np.mean(spearman_r)
 
+        result_dict[name][sex_chromosome]["proba"] = proba[:, 1].tolist()
         result_dict[name][sex_chromosome]["mean_auc"] = mean_auc
         result_dict[name][sex_chromosome]["mean_accuracy"] = mean_accuracy
         result_dict[name][sex_chromosome]["mean_f1"] = mean_f1
@@ -200,7 +201,6 @@ for name in cfg.datasets:
         logger.info(f"{mean_recall=},")
         logger.info(f"{mean_r2=},")
         logger.info(f"{mean_spearman=},")
-
         proba_thresh = 0.5
         tot_accuracy = accuracy_score(y, proba[:, 1] > proba_thresh)
         tot_f1 = f1_score(y, proba[:, 1] > proba_thresh)
