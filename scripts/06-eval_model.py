@@ -1,16 +1,19 @@
 import argparse
 import json
+import warnings
+
 import anndata as ad
 import cupy
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 from catboost import CatBoostClassifier
-from config.loader import Config, load_yaml, FeatureSelectionMethodsEnum
+from config.loader import Config, FeatureSelectionMethodsEnum, load_yaml
 from loguru import logger
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import track
+from scipy.stats import spearmanr
 from sklearn.decomposition import PCA
 from sklearn.metrics import (
     RocCurveDisplay,
@@ -18,9 +21,9 @@ from sklearn.metrics import (
     auc,
     f1_score,
     precision_score,
+    r2_score,
     recall_score,
     roc_auc_score,
-    r2_score,
 )
 from sklearn.model_selection import (
     RepeatedStratifiedKFold,
@@ -28,8 +31,20 @@ from sklearn.model_selection import (
     train_test_split,
 )
 from sklearn.preprocessing import LabelEncoder, RobustScaler
-from scipy.stats import spearmanr
 
+
+def warning_to_loguru(
+    message,
+    category,
+    filename,
+    lineno,
+    file=None,
+    line=None,
+):
+    logger.warning(f"{category.__name__}: {message} ({filename}:{lineno})")
+
+
+warnings.showwarning = warning_to_loguru
 
 models_lookup = {"xgboost": xgb.XGBClassifier, "catboost": CatBoostClassifier}
 
@@ -211,9 +226,9 @@ for name in cfg.datasets:
         logger.info(f"{tot_r2=},")
         logger.info(f"{tot_spearman.statistic=},")
 
-    with open(
-        cfg.paths.results
-        / f"eval_results.{cfg.model_params.model_type}.{value_to_predict}.{cfg.models.train_dataset.upper()}.{name}.json",
-        "w",
-    ) as file:
-        json.dump(result_dict, file)
+with open(
+    cfg.paths.results
+    / f"eval_results.{cfg.model_params.model_type}.{value_to_predict}.{cfg.models.train_dataset.upper()}.json",
+    "w",
+) as file:
+    json.dump(result_dict, file)
