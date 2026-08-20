@@ -255,9 +255,9 @@ for name in cfg.datasets:
         result_dict[name][sex_chromosome]["mean_recall"] = total_recall
         result_dict[name][sex_chromosome]["n_features"] = n_features
 
-    with open(
-        cfg.paths.results
-        / f"train_results.{cfg.model_params.model_type}.{value_to_predict}.{cfg.models.train_dataset.upper()}.{name}.json",
-        "w",
-    ) as file:
-        json.dump(result_dict, file)
+with open(
+    cfg.paths.results
+    / f"train_results.{cfg.model_params.model_type}.{value_to_predict}.{cfg.models.train_dataset.upper()}.json",
+    "w",
+) as file:
+    json.dump(result_dict, file)
