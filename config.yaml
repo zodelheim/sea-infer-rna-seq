@@ -1,7 +1,7 @@
 paths:
   workdir: ./data
   models: ./models
-  results: ./resutls
+  results: ./results
   logs: ./logs
   figures: ./figures
 
