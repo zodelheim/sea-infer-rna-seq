@@ -11,6 +11,10 @@ class UnsupportedFormatError(ConverterError):
     """Unsupported input format."""
 
 
+class EmptyTranscriptList(Exception):
+    """Empty transcripts list"""
+
+
 class InvalidDatasetError(ConverterError):
     """Dataset does not satisfy requirements."""
 
