@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 from config.loader import Config, load_yaml
-from preprocessing.base_converter import BaseConverter
+from preprocessing.base_converter import BaseConverter, GenesConverter
 from loguru import logger
 from rich.console import Console
 from rich.logging import RichHandler
@@ -14,7 +14,6 @@ logger.add(
     level="INFO",
     format="{message}",
 )
-
 
 console = Console()
 
@@ -41,5 +40,7 @@ for name in cfg.datasets:
         continue
     console.rule(f"Preprocessing [bold red]{name}[/bold red] dataset")
     converter = BaseConverter(cfg.datasets[name])
+    # converter = GenesConverter(cfg.datasets[name])
     anndata = converter.run()
     anndata.write(cfg.paths.interim_path / f"{name}.raw.h5ad")
+    logger.info(f"Saved to: {cfg.paths.interim_path / f'{name}.raw.h5ad'}")

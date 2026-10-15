@@ -132,6 +132,7 @@ for name in cfg.datasets:
         features_fname = (
             f"train_features.{sex_chromosome}.{cfg.models.train_dataset.upper()}.{name}.csv"
         )
+        (cfg.paths.models / cfg.model_params.model_type).mkdir(exist_ok=True)
         features_list.to_csv(cfg.paths.models / cfg.model_params.model_type / features_fname)
 
         adata = adata[:, features_list.index]

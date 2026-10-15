@@ -77,3 +77,10 @@ adata.write(
     cfg.paths.processed_path
     / f"{cfg.models.train_dataset.upper()}.preprocessed.{cfg.models.value_to_predict}.h5ad"
 )
+
+logger.info(
+    f"Saved to: {
+        cfg.paths.processed_path
+        / f'{cfg.models.train_dataset.upper()}.preprocessed.{cfg.models.value_to_predict}.h5ad'
+    }"
+)
