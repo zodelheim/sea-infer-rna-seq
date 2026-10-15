@@ -7,7 +7,7 @@ import pandas as pd
 from config.loader import DatasetConfig
 from gtfparse import read_gtf
 from loguru import logger
-from utils.errors import UnsupportedFormatError
+from utils.errors import UnsupportedFormatError, EmptyTranscriptList
 
 
 class BaseConverter(ABC):
@@ -75,6 +75,9 @@ class BaseConverter(ABC):
 
     def to_anndata(self, data_raw, data_header, annotator) -> ad.AnnData:
         columns = data_raw.columns.intersection(annotator.index)
+        if len(columns) == 0:
+            logger.error("No common transcripts in counts_file and annotation_file")
+            assert len(data_raw.columns.intersection(annotator.index)) > 0
         indices = data_raw.index.intersection(data_header.index)
 
         data_raw = data_raw.loc[indices, columns]
@@ -119,3 +122,17 @@ class BaseConverter(ABC):
 
     def _validate(self, data):
         pass
+
+
+class GenesConverter(BaseConverter):
+    def __init__(self, config: DatasetConfig):
+        super().__init__(config)
+
+    def _load_gtf(self, fname: Path):
+        gtf_rawdata = read_gtf(fname)
+        gtf_data = gtf_rawdata.to_pandas()
+        gtf_data["transcript_id"] = gtf_data["gene_id"]
+        gtf_data = gtf_data.set_index("transcript_id")
+        gtf_data["transcript_id"] = gtf_data.index
+        gtf_data = gtf_data.drop_duplicates("transcript_id")
+        return gtf_data
