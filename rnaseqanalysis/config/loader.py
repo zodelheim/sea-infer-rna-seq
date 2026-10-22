@@ -35,9 +35,12 @@ class PathsConfig(BaseModel):
 
     @model_validator(mode="after")
     def make_absolute(self):
-        self.interim_path: Path = self.workdir / "interim"
-        self.processed_path: Path = self.workdir / "processed"
-        self.external_path: Path = self.workdir / "external"
+        if self.interim_path == None:
+            self.interim_path: Path = self.workdir / "interim"
+        if self.processed_path == None:
+            self.processed_path: Path = self.workdir / "processed"
+        if self.external_path == None:
+            self.external_path: Path = self.workdir / "external"
 
         self.workdir = self.workdir.absolute()
         self.interim_path = self.interim_path.absolute()
