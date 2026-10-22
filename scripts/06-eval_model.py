@@ -70,6 +70,13 @@ drop_duplicates = False
 
 if cfg.model_params.feature_selection_method == FeatureSelectionMethodsEnum.top50:
     n_features = 50
+elif cfg.model_params.feature_selection_method == FeatureSelectionMethodsEnum.top20:
+    n_features = 20
+elif cfg.model_params.feature_selection_method == FeatureSelectionMethodsEnum.top100:
+    n_features = 100
+elif cfg.model_params.feature_selection_method == FeatureSelectionMethodsEnum.top10:
+    n_features = 10
+
 
 logger.info(f"Read train dataset: {cfg.models.train_dataset}")
 train_adata = ad.read_h5ad(

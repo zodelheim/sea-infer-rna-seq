@@ -13,6 +13,8 @@ class ModelsEnum(StrEnum):
 
 
 class FeatureSelectionMethodsEnum(StrEnum):
+    top10 = "top10"
+    top20 = "top20"
     top50 = "top50"
     top100 = "top100"
     elbow = "elbow"
